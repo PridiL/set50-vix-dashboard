@@ -1,0 +1,979 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SET50 VIX</title>
+<style>
+:root {
+  color-scheme: light;
+  --page: #f9f9f7;
+  --surface: #fcfcfb;
+  --ink: #0b0b0b;
+  --ink-2: #52514e;
+  --muted: #898781;
+  --grid: #e1e0d9;
+  --axis: #c3c2b7;
+  --ring: rgba(11,11,11,0.10);
+  --up: #b3261e;          /* volatility up = risk up: shown in red ink, with an arrow */
+  --down: #006300;
+  --warn-bg: #fff4d6; --warn-ink: #5c4300;
+  --crit-bg: #fde7e7; --crit-ink: #7a1414;
+  --s-vix: #2a78d6;       /* categorical 1  SET50 VIX (tail-completed) */
+  --s-rv: #eb6834;        /* categorical 2  realized volatility */
+  --s-strict: #1baf7a;    /* categorical 3  strict Cboe variant */
+  --s-vix3m: #8b5cf6;     /* categorical 4  3-month index */
+  --o1: #0d366b; --o2: #1c5cab; --o3: #3987e5; --o4: #86b6ef;   /* ordinal: near -> far expiry */
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --page: #0d0d0d; --surface: #1a1a19; --ink: #ffffff; --ink-2: #c3c2b7; --muted: #898781;
+    --grid: #2c2c2a; --axis: #383835; --ring: rgba(255,255,255,0.10);
+    --up: #ff8a80; --down: #0ca30c;
+    --warn-bg: #3a2f10; --warn-ink: #ffd88a; --crit-bg: #3d1616; --crit-ink: #ffb4b4;
+    --s-vix: #3987e5; --s-rv: #d95926; --s-strict: #199e70; --s-vix3m: #a78bfa;
+    --o1: #b7d3f6; --o2: #6da7ec; --o3: #2a78d6; --o4: #184f95;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #0d0d0d; --surface: #1a1a19; --ink: #ffffff; --ink-2: #c3c2b7; --muted: #898781;
+  --grid: #2c2c2a; --axis: #383835; --ring: rgba(255,255,255,0.10);
+  --up: #ff8a80; --down: #0ca30c;
+  --warn-bg: #3a2f10; --warn-ink: #ffd88a; --crit-bg: #3d1616; --crit-ink: #ffb4b4;
+  --s-vix: #3987e5; --s-rv: #d95926; --s-strict: #199e70; --s-vix3m: #a78bfa;
+  --o1: #b7d3f6; --o2: #6da7ec; --o3: #2a78d6; --o4: #184f95;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--page); color: var(--ink);
+  font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+.wrap { max-width: 1180px; margin: 0 auto; padding: 28px 20px 48px; }
+header h1 { margin: 0; font-size: 22px; font-weight: 650; letter-spacing: -0.01em; }
+header p { margin: 4px 0 0; color: var(--ink-2); }
+.meta { color: var(--muted); font-size: 12.5px; margin-top: 6px; }
+.banner { border-radius: 8px; padding: 10px 14px; margin-top: 14px; font-size: 13px; }
+.banner.warn { background: var(--warn-bg); color: var(--warn-ink); }
+.banner.crit { background: var(--crit-bg); color: var(--crit-ink); }
+.desc .qsrc { color: var(--muted); }
+.banner b { font-weight: 650; }
+
+.card { background: var(--surface); border-radius: 12px; box-shadow: 0 0 0 1px var(--ring);
+  padding: 18px 20px; }
+.hero { display: grid; grid-template-columns: minmax(220px, 1.1fr) repeat(5, minmax(120px, 1fr));
+  gap: 0; margin-top: 20px; padding: 0; overflow: hidden; }
+.hero > div { padding: 18px 20px; border-left: 1px solid var(--grid); }
+.hero > div:first-child { border-left: 0; }
+.lbl { color: var(--ink-2); font-size: 12.5px; }
+.big { font-size: 56px; font-weight: 650; line-height: 1.05; letter-spacing: -0.02em; margin-top: 4px; }
+.val { font-size: 24px; font-weight: 600; margin-top: 6px; }
+.sub { color: var(--muted); font-size: 12px; margin-top: 4px; }
+.delta { font-size: 13px; margin-top: 6px; font-weight: 550; }
+.delta.up { color: var(--up); } .delta.down { color: var(--down); } .delta.flat { color: var(--muted); }
+@media (max-width: 900px) {
+  .hero { grid-template-columns: 1fr 1fr; }
+  .hero > div { border-left: 0; border-top: 1px solid var(--grid); }
+  .hero > div:first-child { grid-column: 1 / -1; border-top: 0; }
+}
+
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px; }
+@media (max-width: 900px) { .grid2 { grid-template-columns: 1fr; } }
+.card.full { margin-top: 16px; }
+.card h2 { margin: 0; font-size: 15px; font-weight: 620; }
+.card .desc { margin: 3px 0 0; color: var(--ink-2); font-size: 12.5px; }
+.head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+.legend { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 10px; font-size: 12.5px; color: var(--ink-2); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.key { width: 14px; height: 3px; border-radius: 2px; display: inline-block; }
+.keydot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+
+.seg { display: inline-flex; background: var(--page); border-radius: 8px; padding: 2px;
+  box-shadow: inset 0 0 0 1px var(--grid); }
+.seg button { border: 0; background: transparent; color: var(--ink-2); font: inherit; font-size: 12.5px;
+  padding: 4px 10px; border-radius: 6px; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--surface); color: var(--ink); font-weight: 600;
+  box-shadow: 0 0 0 1px var(--ring); }
+
+.chart { position: relative; margin-top: 8px; }
+.chart svg { display: block; width: 100%; overflow: visible; }
+.chart text { font: 11px system-ui, -apple-system, "Segoe UI", sans-serif; fill: var(--muted);
+  font-variant-numeric: tabular-nums; }
+.chart text.dl { fill: var(--ink-2); font-size: 11.5px; }
+.chart text.dl.strong { fill: var(--ink); font-weight: 600; }
+.note { fill: var(--muted); font-size: 11.5px; }
+.stats { display: flex; flex-wrap: wrap; gap: 6px 28px; margin-top: 12px; font-size: 12.5px; color: var(--ink-2); }
+.stats b { color: var(--ink); font-weight: 600; font-size: 15px; margin-left: 6px; font-variant-numeric: tabular-nums; }
+.stats small { color: var(--muted); font-size: 12px; margin-left: 4px; }
+.keyring { width: 9px; height: 9px; border-radius: 50%; display: inline-block; box-shadow: inset 0 0 0 2px var(--s-vix); }
+.tip { position: absolute; pointer-events: none; background: var(--surface); color: var(--ink);
+  box-shadow: 0 0 0 1px var(--ring), 0 6px 20px rgba(0,0,0,.12); border-radius: 8px;
+  padding: 8px 10px; font-size: 12px; white-space: nowrap; z-index: 5; }
+.tip .t { color: var(--ink-2); margin-bottom: 4px; }
+.tip .r { display: flex; align-items: center; gap: 6px; font-variant-numeric: tabular-nums; }
+.tip .r b { margin-left: auto; padding-left: 12px; font-weight: 600; }
+
+.tbl-wrap { overflow-x: auto; margin-top: 12px; }
+table { width: 100%; border-collapse: collapse; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+th { text-align: right; color: var(--muted); font-weight: 500; padding: 6px 8px; border-bottom: 1px solid var(--axis); white-space: nowrap; }
+td { text-align: right; padding: 5px 8px; border-bottom: 1px solid var(--grid); white-space: nowrap; }
+th:first-child, td:first-child { text-align: left; }
+#t-strip th:nth-child(2), #t-strip td:nth-child(2) { text-align: left; }
+tr.idx td { font-weight: 600; }
+tr.model td { color: var(--muted); font-style: italic; }
+tr.atm td { font-weight: 600; }
+.bar { display: inline-block; height: 8px; border-radius: 0 4px 4px 0; background: var(--s-vix); vertical-align: middle; }
+.pill { display: inline-block; font-size: 11px; padding: 1px 7px; border-radius: 10px; background: var(--page);
+  box-shadow: inset 0 0 0 1px var(--grid); color: var(--ink-2); font-style: normal; font-weight: 500; }
+
+details { margin-top: 16px; }
+details summary { cursor: pointer; font-weight: 600; font-size: 14px; }
+details .body { color: var(--ink-2); font-size: 13px; margin-top: 8px; }
+details .body li { margin: 4px 0; }
+footer { color: var(--muted); font-size: 12px; margin-top: 24px; }
+code { font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>SET50 VIX</h1>
+    <p>Implied volatility of the SET50 at 30 days (1M) and 93 days (3M), computed with the Cboe VIX method from TFEX SET50 Index Options.</p>
+    <div class="meta" id="meta"></div>
+  </header>
+  <div id="banners"></div>
+
+  <section class="card hero" id="hero"></section>
+
+  <section class="card full">
+    <div class="head">
+      <div>
+        <h2>SET50 VIX history</h2>
+        <p class="desc">Daily closes of the 30-day index rebuilt from TFEX settlement prices, against 21-day realized volatility of the SET50 (annualized, %). TFEX publishes settlements the next day, so a quote-based reading is shown as a ring whenever it is ahead of the settlement series.</p>
+      </div>
+      <div class="seg" id="range" role="group" aria-label="Time range">
+        <button data-m="1">1 mo</button><button data-m="3">3 mo</button><button data-m="6">6 mo</button><button data-m="12" aria-pressed="true">1 yr</button><button data-m="24">2 yr</button>
+      </div>
+    </div>
+    <div class="stats" id="hist-stats"></div>
+    <div class="legend">
+      <span><i class="key" style="background:var(--s-vix)"></i>SET50 VIX, daily close (TFEX settlement)</span>
+      <span><i class="keyring"></i>Quote-based reading (option bid/ask)</span>
+      <span><i class="key" style="background:var(--s-rv)"></i>Realized vol, 21 days</span>
+    </div>
+    <div class="chart" id="c-hist"></div>
+  </section>
+
+  <section class="card full">
+    <div class="head">
+      <div>
+        <h2>SET50 VIX 1M and 3M</h2>
+        <p class="desc">The 30-day (1M) and 93-day (3M) indices side by side, daily closes from TFEX settlement prices, with the 3M − 1M spread underneath. 3M above 1M (contango) means the market prices more volatility further out; 1M above 3M (backwardation) is the stress signature, when near-term protection is bid up.</p>
+      </div>
+      <div class="seg" id="range2" role="group" aria-label="Time range">
+        <button data-m="1">1 mo</button><button data-m="3">3 mo</button><button data-m="6">6 mo</button><button data-m="12" aria-pressed="true">1 yr</button><button data-m="24">2 yr</button>
+      </div>
+    </div>
+    <div class="stats" id="term-stats"></div>
+    <div class="legend">
+      <span><i class="key" style="background:var(--s-vix)"></i>SET50 VIX 1M (30-day)</span>
+      <span><i class="key" style="background:var(--s-vix3m)"></i>SET50 VIX 3M (93-day)</span>
+      <span><i class="keyring"></i>Quote-based reading</span>
+      <span><i class="key" style="background:var(--s-strict)"></i>3M − 1M spread: green = contango</span>
+      <span><i class="key" style="background:var(--s-rv)"></i>orange = backwardation</span>
+    </div>
+    <div class="chart" id="c-horizons"></div>
+  </section>
+
+  <section class="card full">
+    <div class="head">
+      <div>
+        <h2>3M − 1M spread: rolling 10-day z-score</h2>
+        <p class="desc">Each day's spread (VIX 3M − VIX 1M) minus its mean over the last 10 trading days, divided by the standard deviation over the same 10 days. It measures how unusual today's term-structure move is against the recent run, not the level: a positive score means the curve steepened toward contango relative to its 10-day average, a negative score that it flattened or flipped toward backwardation. Beyond ±2 is rare (about 5% of days if moves were normal) and marks a regime shift in progress.</p>
+      </div>
+      <div class="seg" id="range3" role="group" aria-label="Time range">
+        <button data-m="1">1 mo</button><button data-m="3">3 mo</button><button data-m="6">6 mo</button><button data-m="12" aria-pressed="true">1 yr</button><button data-m="24">2 yr</button>
+      </div>
+    </div>
+    <div class="stats" id="z-stats"></div>
+    <div class="legend">
+      <span><i class="key" style="background:var(--ink-2)"></i>10-day z-score of 3M − 1M</span>
+      <span><i class="key" style="background:var(--s-strict)"></i>above 0: steepening (toward contango)</span>
+      <span><i class="key" style="background:var(--s-rv)"></i>below 0: flattening (toward backwardation)</span>
+      <span><i class="key" style="background:var(--axis)"></i>±2 bands</span>
+    </div>
+    <div class="chart" id="c-zscore"></div>
+  </section>
+
+  <section class="card full">
+    <div class="head">
+      <div>
+        <h2>Z-score against SET50 Index Futures</h2>
+        <p class="desc">The 10-day z-score of the 3M − 1M spread under the continuous SET50 Index Futures (TradingView <code>TFEX:S501!</code>, front month, daily close). Days when the z-score went beyond ±2 are marked on the futures line, so a curve shock can be read against what the index did next.</p>
+      </div>
+      <div class="seg" id="range4" role="group" aria-label="Time range">
+        <button data-m="1">1 mo</button><button data-m="3">3 mo</button><button data-m="6">6 mo</button><button data-m="12" aria-pressed="true">1 yr</button><button data-m="24">2 yr</button>
+      </div>
+    </div>
+    <div class="stats" id="fut-stats"></div>
+    <div class="legend">
+      <span><i class="key" style="background:var(--s-vix)"></i>SET50 Index Futures, continuous (S501!)</span>
+      <span><i class="key" style="background:var(--ink-2)"></i>10-day z-score of 3M − 1M</span>
+      <span><i class="keydot" style="background:var(--s-strict)"></i>z &gt; +2</span>
+      <span><i class="keydot" style="background:var(--s-rv)"></i>z &lt; −2</span>
+    </div>
+    <div class="chart" id="c-fut"></div>
+  </section>
+
+  <div class="grid2">
+    <section class="card">
+      <h2>Term structure</h2>
+      <p class="desc">Model-free volatility of each expiry. Each index is interpolated between the two expiries either side of its horizon: 30 days for 1M, 93 days for 3M. <span class="qsrc"></span></p>
+      <div class="legend">
+        <span><i class="keydot" style="background:var(--s-vix)"></i>Tail-completed</span>
+        <span><i class="keydot" style="background:var(--s-strict)"></i>Strict Cboe (listed strikes)</span>
+      </div>
+      <div class="chart" id="c-term"></div>
+    </section>
+    <section class="card">
+      <h2>Volatility smile</h2>
+      <p class="desc">Implied volatility of each out-of-the-money option's bid/ask mid (Black-76), per expiry. <span class="qsrc"></span></p>
+      <div class="legend" id="smile-legend"></div>
+      <div class="chart" id="c-smile"></div>
+    </section>
+  </div>
+
+  <section class="card full">
+    <h2>By expiry</h2>
+    <div class="tbl-wrap"><table id="t-term"></table></div>
+  </section>
+
+  <section class="card full">
+    <div class="head">
+      <div>
+        <h2>Option strip</h2>
+        <p class="desc">The out-of-the-money options that make up each term's variance, and each strike's share of it. <span class="qsrc"></span></p>
+      </div>
+      <div class="seg" id="strip-tabs" role="group" aria-label="Expiry"></div>
+    </div>
+    <div class="tbl-wrap"><table id="t-strip"></table></div>
+  </section>
+
+  <details class="card full">
+    <summary>How it is calculated</summary>
+    <div class="body">
+      <ul>
+        <li><b>Per expiry.</b> σ² = (2/T) Σ (ΔK/K²) e<sup>RT</sup> Q(K) − (1/T)(F/K₀ − 1)², using the bid/ask mid of out-of-the-money puts below K₀ and calls above it, and the put/call average at K₀. The forward F comes from put-call parity at the strike where call and put prices are closest. The strip stops after two consecutive strikes with no usable bid.</li>
+        <li><b>30-day (1M) index.</b> Total variance is interpolated linearly in time between the expiries either side of 30 days, then annualized: <code>100 × √(σ²₃₀)</code>. Expiries closer than 2 days are dropped. (TFEX lists monthly expiries only, so the classic 7-day roll left both remaining expiries beyond 30 days on a quarter of all days; extrapolating from them amplifies the uneven spacing of neighbouring expiries' volatilities and caused jumps on roll days. On two years of data the 2-day roll cut extrapolated days from 120 to 41 and the worst roll-day jump from 4.3 to 2.5 points.)</li>
+        <li><b>3-month index.</b> The same interpolation to 93 days (the Cboe VIX3M convention), between the expiries either side of 93 days. TFEX lists four expiries (three consecutive months and the next quarter-end), so 93 days is bracketed on all but a handful of days each year, when the farthest expiry is 92 days out and the index extrapolates from the last two. A 3M above 1M (contango) is the usual state; 1M above 3M (backwardation) marks stress, as on 4 Mar 2026 when 1M reached 33.7 against a 3M of 18.7.</li>
+        <li><b>Spread z-score.</b> For each settlement day, the 3M − 1M spread minus its mean over the trailing 10 trading days (that day included), divided by the sample standard deviation of the same 10 spreads. Settlement values only, so both legs come from the same price source. It scores the change in the curve against its recent behaviour, not the curve's level: the spread itself says whether the curve is in contango or backwardation.</li>
+        <li><b>History.</b> Every trading day since 11 Sep 2024 is recomputed with the same formula from TFEX's daily settlement prices, which exist for every listed series, traded or not. TFEX floors far out-of-the-money settlements at the 0.10 tick; those count as a zero bid, so the strip stops after two of them in a row. The expiry-day row, which TFEX reports as the final index value, is excluded. TFEX's site keeps about two years online; the collector keeps its own copy, so the series keeps growing. Settlement-based and quote-based values are not identical: TFEX's settlement prices and the bid/ask mids of thinly quoted options can differ, so the live point may sit a point or so off the settlement line.</li>
+        <li><b>Strict vs tail-completed.</b> TradingView lists back months over a narrow strike range (e.g. 1010–1140), while options at the edge are still worth several points, so the strict strip cuts off part of the tail and understates variance. The tail-completed version extends each wing in 10-point steps with Black-76 prices at the last quoted strike's IV, held flat, until the premium falls below 0.05. Flat IV is conservative: the put skew usually keeps rising, so the true value is at or slightly above the headline.</li>
+        <li><b>Inputs.</b> Option quotes from TradingView's options screener (TFEX, 15-minute delayed). SET50 Index Futures: TradingView's continuous front-month series <code>TFEX:S501!</code>, unadjusted, daily close. Risk-free rate: Thailand 1-year government bond yield. Expiry time: 16:30 Bangkok on the last trading day. Realized volatility: 21-day standard deviation of daily log returns, × √252.</li>
+        <li><b>Caveats.</b> TFEX options are thinly quoted; some far strikes carry placeholder markets (bid 0.1 / ask 373) and are excluded when the spread exceeds both 5 points and the option's own mid. This is an independent calculation, not an official TFEX or SET index.</li>
+      </ul>
+    </div>
+  </details>
+
+  <footer id="foot"></footer>
+</div>
+
+<script>
+const D = {"captured_utc":"2026-09-19T01:00:06+00:00","session":"2026-09-18","session_closed":true,"spot":1069.76,"rate":0.01175,"feed":"delayed_streaming_900","index":{"strict":12.84,"tail":13.169},"near":20260929,"next":20261029,"w_near":0.34514,"w_next":0.65486,"mode":"interpolated","index3m":{"strict":12.766,"tail":13.443},"near3m":20261127,"next3m":20261229,"w3m_near":0.26107,"w3m_next":0.73893,"mode3m":"interpolated","rv":9.344,"expiries":[{"exp":20260929,"date":"2026-09-29","days":10.354,"listed":[910,1150],"smile":[{"k":910,"iv":40.44},{"k":920,"iv":38.006},{"k":930,"iv":36.628},{"k":940,"iv":34.159},{"k":950,"iv":31.699},{"k":960,"iv":28.372},{"k":970,"iv":27.504},{"k":980,"iv":25.594},{"k":990,"iv":24.438},{"k":1000,"iv":22.824},{"k":1010,"iv":20.322},{"k":1020,"iv":18.431},{"k":1030,"iv":16.88},{"k":1040,"iv":15.345},{"k":1050,"iv":13.753},{"k":1060,"iv":13.236},{"k":1070,"iv":12.174},{"k":1080,"iv":12.194},{"k":1090,"iv":11.63},{"k":1100,"iv":11.775},{"k":1110,"iv":11.758},{"k":1120,"iv":13.573},{"k":1130,"iv":16.291},{"k":1140,"iv":18.457},{"k":1150,"iv":19.148}],"in_index":true,"in_index3m":false,"strict":{"vol":14.563,"F":1069.4,"K0":1060,"n":25,"rows":[{"k":910,"side":"put","bid":0.1,"ask":0.3,"q":0.2,"c":2e-06,"share":0.008032},{"k":920,"side":"put","bid":0.1,"ask":0.3,"q":0.2,"c":2e-06,"share":0.007858},{"k":930,"side":"put","bid":0.1,"ask":0.4,"q":0.25,"c":3e-06,"share":0.009613},{"k":940,"side":"put","bid":0.1,"ask":0.4,"q":0.25,"c":3e-06,"share":0.009409},{"k":950,"side":"put","bid":0.1,"ask":0.4,"q":0.25,"c":3e-06,"share":0.009212},{"k":960,"side":"put","bid":0.1,"ask":0.3,"q":0.2,"c":2e-06,"share":0.007217},{"k":970,"side":"put","bid":0.2,"ask":0.4,"q":0.3,"c":3e-06,"share":0.010603},{"k":980,"side":"put","bid":0.3,"ask":0.4,"q":0.35,"c":4e-06,"share":0.012119},{"k":990,"side":"put","bid":0.4,"ask":0.6,"q":0.5,"c":5e-06,"share":0.016965},{"k":1000,"side":"put","bid":0.6,"ask":0.7,"q":0.65,"c":7e-06,"share":0.021616},{"k":1010,"side":"put","bid":0.6,"ask":0.8,"q":0.7,"c":7e-06,"share":0.02282},{"k":1020,"side":"put","bid":0.8,"ask":1,"q":0.9,"c":9e-06,"share":0.028768},{"k":1030,"side":"put","bid":1.2,"ask":1.4,"q":1.3,"c":1.2e-05,"share":0.04075},{"k":1040,"side":"put","bid":1.9,"ask":2,"q":1.95,"c":1.8e-05,"share":0.059956},{"k":1050,"side":"put","bid":2.9,"ask":3.1,"q":3.0,"c":2.7e-05,"share":0.090491},{"k":1060,"side":"atm","bid":null,"ask":null,"q":10.15,"c":9e-05,"share":0.300412},{"k":1070,"side":"call","bid":8.2,"ask":8.7,"q":8.45,"c":7.4e-05,"share":0.245444},{"k":1080,"side":"call","bid":4.4,"ask":4.6,"q":4.5,"c":3.9e-05,"share":0.1283},{"k":1090,"side":"call","bid":1.7,"ask":2,"q":1.85,"c":1.6e-05,"share":0.051782},{"k":1100,"side":"call","bid":0.6,"ask":0.9,"q":0.75,"c":6e-06,"share":0.020613},{"k":1110,"side":"call","bid":0.2,"ask":0.3,"q":0.25,"c":2e-06,"share":0.006748},{"k":1120,"side":"call","bid":0.1,"ask":0.3,"q":0.2,"c":2e-06,"share":0.005302},{"k":1130,"side":"call","bid":0.1,"ask":0.4,"q":0.25,"c":2e-06,"share":0.006511},{"k":1140,"side":"call","bid":0.1,"ask":0.4,"q":0.25,"c":2e-06,"share":0.006397},{"k":1150,"side":"call","bid":0.1,"ask":0.2,"q":0.15,"c":1e-06,"share":0.003772}]},"tail":{"vol":14.633,"F":1069.4,"K0":1060,"n":28,"rows":[{"k":890,"side":"put-x","bid":null,"ask":null,"q":0.071307,"c":1e-06,"share":0.002965},{"k":900,"side":"put-x","bid":null,"ask":null,"q":0.121136,"c":1e-06,"share":0.004926},{"k":910,"side":"put","bid":0.1,"ask":0.3,"q":0.2,"c":2e-06,"share":0.007955},{"k":920,"side":"put","bid":0.1,"ask":0.3,"q":0.2,"c":2e-06,"share":0.007783},{"k":930,"side":"put","bid":0.1,"ask":0.4,"q":0.25,"c":3e-06,"share":0.009521},{"k":940,"side":"put","bid":0.1,"ask":0.4,"q":0.25,"c":3e-06,"share":0.009319},{"k":950,"side":"put","bid":0.1,"ask":0.4,"q":0.25,"c":3e-06,"share":0.009124},{"k":960,"side":"put","bid":0.1,"ask":0.3,"q":0.2,"c":2e-06,"share":0.007148},{"k":970,"side":"put","bid":0.2,"ask":0.4,"q":0.3,"c":3e-06,"share":0.010502},{"k":980,"side":"put","bid":0.3,"ask":0.4,"q":0.35,"c":4e-06,"share":0.012004},{"k":990,"side":"put","bid":0.4,"ask":0.6,"q":0.5,"c":5e-06,"share":0.016804},{"k":1000,"side":"put","bid":0.6,"ask":0.7,"q":0.65,"c":7e-06,"share":0.02141},{"k":1010,"side":"put","bid":0.6,"ask":0.8,"q":0.7,"c":7e-06,"share":0.022602},{"k":1020,"side":"put","bid":0.8,"ask":1,"q":0.9,"c":9e-06,"share":0.028493},{"k":1030,"side":"put","bid":1.2,"ask":1.4,"q":1.3,"c":1.2e-05,"share":0.040362},{"k":1040,"side":"put","bid":1.9,"ask":2,"q":1.95,"c":1.8e-05,"share":0.059384},{"k":1050,"side":"put","bid":2.9,"ask":3.1,"q":3.0,"c":2.7e-05,"share":0.089628},{"k":1060,"side":"atm","bid":null,"ask":null,"q":10.15,"c":9e-05,"share":0.297547},{"k":1070,"side":"call","bid":8.2,"ask":8.7,"q":8.45,"c":7.4e-05,"share":0.243103},{"k":1080,"side":"call","bid":4.4,"ask":4.6,"q":4.5,"c":3.9e-05,"share":0.127077},{"k":1090,"side":"call","bid":1.7,"ask":2,"q":1.85,"c":1.6e-05,"share":0.051288},{"k":1100,"side":"call","bid":0.6,"ask":0.9,"q":0.75,"c":6e-06,"share":0.020416},{"k":1110,"side":"call","bid":0.2,"ask":0.3,"q":0.25,"c":2e-06,"share":0.006683},{"k":1120,"side":"call","bid":0.1,"ask":0.3,"q":0.2,"c":2e-06,"share":0.005252},{"k":1130,"side":"call","bid":0.1,"ask":0.4,"q":0.25,"c":2e-06,"share":0.006449},{"k":1140,"side":"call","bid":0.1,"ask":0.4,"q":0.25,"c":2e-06,"share":0.006336},{"k":1150,"side":"call","bid":0.1,"ask":0.2,"q":0.15,"c":1e-06,"share":0.003736},{"k":1160,"side":"call-x","bid":null,"ask":null,"q":0.067276,"c":1e-06,"share":0.001647}]}},{"exp":20261029,"date":"2026-10-29","days":40.354,"listed":[1010,1140],"smile":[{"k":1010,"iv":13.733},{"k":1020,"iv":13.38},{"k":1030,"iv":13.261},{"k":1040,"iv":12.993},{"k":1050,"iv":12.857},{"k":1060,"iv":12.559},{"k":1070,"iv":12.697},{"k":1080,"iv":12.768},{"k":1090,"iv":12.544},{"k":1100,"iv":12.588},{"k":1110,"iv":12.455},{"k":1120,"iv":12.224},{"k":1130,"iv":12.577},{"k":1140,"iv":13.326}],"in_index":true,"in_index3m":false,"strict":{"vol":12.589,"F":1070.3,"K0":1070,"n":14,"rows":[{"k":1010,"side":"put","bid":2,"ask":2.6,"q":2.3,"c":2.3e-05,"share":0.025769},{"k":1020,"side":"put","bid":2.8,"ask":3.8,"q":3.3,"c":3.2e-05,"share":0.036251},{"k":1030,"side":"put","bid":4.4,"ask":5.4,"q":4.9,"c":4.6e-05,"share":0.052788},{"k":1040,"side":"put","bid":6.4,"ask":7.4,"q":6.9,"c":6.4e-05,"share":0.072911},{"k":1050,"side":"put","bid":9.2,"ask":10.2,"q":9.7,"c":8.8e-05,"share":0.100555},{"k":1060,"side":"put","bid":12.5,"ask":13.6,"q":13.05,"c":0.000116,"share":0.132742},{"k":1070,"side":"atm","bid":null,"ask":null,"q":18.0,"c":0.000157,"share":0.179686},{"k":1080,"side":"call","bid":13,"ask":14.5,"q":13.75,"c":0.000118,"share":0.13473},{"k":1090,"side":"call","bid":9.3,"ask":10.3,"q":9.8,"c":8.3e-05,"share":0.094272},{"k":1100,"side":"call","bid":6.5,"ask":7.5,"q":7.0,"c":5.8e-05,"share":0.066118},{"k":1110,"side":"call","bid":4.4,"ask":5,"q":4.7,"c":3.8e-05,"share":0.043598},{"k":1120,"side":"call","bid":2.7,"ask":3.2,"q":2.95,"c":2.4e-05,"share":0.026878},{"k":1130,"side":"call","bid":1.6,"ask":2.6,"q":2.1,"c":1.6e-05,"share":0.018796},{"k":1140,"side":"call","bid":0.4,"ask":3,"q":1.7,"c":1.3e-05,"share":0.01495}]},"tail":{"vol":12.959,"F":1070.3,"K0":1070,"n":26,"rows":[{"k":950,"side":"put-x","bid":null,"ask":null,"q":0.064952,"c":1e-06,"share":0.000776},{"k":960,"side":"put-x","bid":null,"ask":null,"q":0.132787,"c":1e-06,"share":0.001554},{"k":970,"side":"put-x","bid":null,"ask":null,"q":0.257907,"c":3e-06,"share":0.002957},{"k":980,"side":"put-x","bid":null,"ask":null,"q":0.476974,"c":5e-06,"share":0.005357},{"k":990,"side":"put-x","bid":null,"ask":null,"q":0.841844,"c":9e-06,"share":0.009265},{"k":1000,"side":"put-x","bid":null,"ask":null,"q":1.421185,"c":1.4e-05,"share":0.015329},{"k":1010,"side":"put","bid":2,"ask":2.6,"q":2.3,"c":2.3e-05,"share":0.02432},{"k":1020,"side":"put","bid":2.8,"ask":3.8,"q":3.3,"c":3.2e-05,"share":0.034212},{"k":1030,"side":"put","bid":4.4,"ask":5.4,"q":4.9,"c":4.6e-05,"share":0.049819},{"k":1040,"side":"put","bid":6.4,"ask":7.4,"q":6.9,"c":6.4e-05,"share":0.06881},{"k":1050,"side":"put","bid":9.2,"ask":10.2,"q":9.7,"c":8.8e-05,"share":0.0949},{"k":1060,"side":"put","bid":12.5,"ask":13.6,"q":13.05,"c":0.000116,"share":0.125277},{"k":1070,"side":"atm","bid":null,"ask":null,"q":18.0,"c":0.000157,"share":0.16958},{"k":1080,"side":"call","bid":13,"ask":14.5,"q":13.75,"c":0.000118,"share":0.127153},{"k":1090,"side":"call","bid":9.3,"ask":10.3,"q":9.8,"c":8.3e-05,"share":0.08897},{"k":1100,"side":"call","bid":6.5,"ask":7.5,"q":7.0,"c":5.8e-05,"share":0.0624},{"k":1110,"side":"call","bid":4.4,"ask":5,"q":4.7,"c":3.8e-05,"share":0.041146},{"k":1120,"side":"call","bid":2.7,"ask":3.2,"q":2.95,"c":2.4e-05,"share":0.025366},{"k":1130,"side":"call","bid":1.6,"ask":2.6,"q":2.1,"c":1.6e-05,"share":0.017739},{"k":1140,"side":"call","bid":0.4,"ask":3,"q":1.7,"c":1.3e-05,"share":0.014109},{"k":1150,"side":"call-x","bid":null,"ask":null,"q":1.08567,"c":8e-06,"share":0.008855},{"k":1160,"side":"call-x","bid":null,"ask":null,"q":0.675309,"c":5e-06,"share":0.005413},{"k":1170,"side":"call-x","bid":null,"ask":null,"q":0.409158,"c":3e-06,"share":0.003224},{"k":1180,"side":"call-x","bid":null,"ask":null,"q":0.241502,"c":2e-06,"share":0.001871},{"k":1190,"side":"call-x","bid":null,"ask":null,"q":0.13889,"c":1e-06,"share":0.001058},{"k":1200,"side":"call-x","bid":null,"ask":null,"q":0.077849,"c":1e-06,"share":0.000583}]}},{"exp":20261127,"date":"2026-11-27","days":69.354,"listed":[1010,1130],"smile":[{"k":1010,"iv":13.6},{"k":1020,"iv":13.429},{"k":1030,"iv":13.241},{"k":1040,"iv":13.094},{"k":1050,"iv":13.003},{"k":1060,"iv":12.737},{"k":1070,"iv":12.804},{"k":1080,"iv":12.577},{"k":1090,"iv":12.42},{"k":1100,"iv":12.075},{"k":1110,"iv":11.634},{"k":1120,"iv":11.308},{"k":1130,"iv":11.175}],"in_index":false,"in_index3m":true,"strict":{"vol":11.869,"F":1070.551,"K0":1070,"n":13,"rows":[{"k":1010,"side":"put","bid":4.8,"ask":5.8,"q":5.3,"c":5.2e-05,"share":0.038906},{"k":1020,"side":"put","bid":6.5,"ask":7.5,"q":7.0,"c":6.7e-05,"share":0.050382},{"k":1030,"side":"put","bid":8.6,"ask":9.6,"q":9.1,"c":8.6e-05,"share":0.064231},{"k":1040,"side":"put","bid":11,"ask":12.5,"q":11.75,"c":0.000109,"share":0.081349},{"k":1050,"side":"put","bid":14.3,"ask":15.8,"q":15.05,"c":0.000137,"share":0.10222},{"k":1060,"side":"put","bid":17.9,"ask":19.4,"q":18.65,"c":0.000166,"share":0.124293},{"k":1070,"side":"atm","bid":null,"ask":null,"q":23.775,"c":0.000208,"share":0.1555},{"k":1080,"side":"call","bid":18.3,"ask":19.8,"q":19.05,"c":0.000164,"share":0.1223},{"k":1090,"side":"call","bid":14.1,"ask":15.6,"q":14.85,"c":0.000125,"share":0.093595},{"k":1100,"side":"call","bid":10.5,"ask":11.5,"q":11.0,"c":9.1e-05,"share":0.068075},{"k":1110,"side":"call","bid":7.2,"ask":8.2,"q":7.7,"c":6.3e-05,"share":0.046798},{"k":1120,"side":"call","bid":4.8,"ask":5.7,"q":5.25,"c":4.2e-05,"share":0.03134},{"k":1130,"side":"call","bid":3.1,"ask":4.1,"q":3.6,"c":2.8e-05,"share":0.021112}]},"tail":{"vol":12.607,"F":1070.551,"K0":1070,"n":32,"rows":[{"k":910,"side":"put-x","bid":null,"ask":null,"q":0.054103,"c":1e-06,"share":0.000434},{"k":920,"side":"put-x","bid":null,"ask":null,"q":0.098602,"c":1e-06,"share":0.000773},{"k":930,"side":"put-x","bid":null,"ask":null,"q":0.173494,"c":2e-06,"share":0.001331},{"k":940,"side":"put-x","bid":null,"ask":null,"q":0.29514,"c":3e-06,"share":0.002217},{"k":950,"side":"put-x","bid":null,"ask":null,"q":0.486097,"c":5e-06,"share":0.003575},{"k":960,"side":"put-x","bid":null,"ask":null,"q":0.776173,"c":8e-06,"share":0.00559},{"k":970,"side":"put-x","bid":null,"ask":null,"q":1.203139,"c":1.3e-05,"share":0.008487},{"k":980,"side":"put-x","bid":null,"ask":null,"q":1.812872,"c":1.9e-05,"share":0.012528},{"k":990,"side":"put-x","bid":null,"ask":null,"q":2.658736,"c":2.7e-05,"share":0.018005},{"k":1000,"side":"put-x","bid":null,"ask":null,"q":3.800103,"c":3.8e-05,"share":0.025222},{"k":1010,"side":"put","bid":4.8,"ask":5.8,"q":5.3,"c":5.2e-05,"share":0.034484},{"k":1020,"side":"put","bid":6.5,"ask":7.5,"q":7.0,"c":6.7e-05,"share":0.044656},{"k":1030,"side":"put","bid":8.6,"ask":9.6,"q":9.1,"c":8.6e-05,"share":0.056931},{"k":1040,"side":"put","bid":11,"ask":12.5,"q":11.75,"c":0.000109,"share":0.072103},{"k":1050,"side":"put","bid":14.3,"ask":15.8,"q":15.05,"c":0.000137,"share":0.090602},{"k":1060,"side":"put","bid":17.9,"ask":19.4,"q":18.65,"c":0.000166,"share":0.110166},{"k":1070,"side":"atm","bid":null,"ask":null,"q":23.775,"c":0.000208,"share":0.137826},{"k":1080,"side":"call","bid":18.3,"ask":19.8,"q":19.05,"c":0.000164,"share":0.108399},{"k":1090,"side":"call","bid":14.1,"ask":15.6,"q":14.85,"c":0.000125,"share":0.082957},{"k":1100,"side":"call","bid":10.5,"ask":11.5,"q":11.0,"c":9.1e-05,"share":0.060337},{"k":1110,"side":"call","bid":7.2,"ask":8.2,"q":7.7,"c":6.3e-05,"share":0.041479},{"k":1120,"side":"call","bid":4.8,"ask":5.7,"q":5.25,"c":4.2e-05,"share":0.027778},{"k":1130,"side":"call","bid":3.1,"ask":4.1,"q":3.6,"c":2.8e-05,"share":0.018712},{"k":1140,"side":"call-x","bid":null,"ask":null,"q":2.495182,"c":1.9e-05,"share":0.012743},{"k":1150,"side":"call-x","bid":null,"ask":null,"q":1.693176,"c":1.3e-05,"share":0.008497},{"k":1160,"side":"call-x","bid":null,"ask":null,"q":1.124855,"c":8e-06,"share":0.005548},{"k":1170,"side":"call-x","bid":null,"ask":null,"q":0.731654,"c":5e-06,"share":0.003547},{"k":1180,"side":"call-x","bid":null,"ask":null,"q":0.465986,"c":3e-06,"share":0.002221},{"k":1190,"side":"call-x","bid":null,"ask":null,"q":0.290642,"c":2e-06,"share":0.001362},{"k":1200,"side":"call-x","bid":null,"ask":null,"q":0.177558,"c":1e-06,"share":0.000818},{"k":1210,"side":"call-x","bid":null,"ask":null,"q":0.106271,"c":1e-06,"share":0.000482},{"k":1220,"side":"call-x","bid":null,"ask":null,"q":0.062327,"c":0.0,"share":0.000278}]}},{"exp":20261229,"date":"2026-12-29","days":101.354,"listed":[960,1150],"smile":[{"k":960,"iv":16.762},{"k":970,"iv":16.376},{"k":980,"iv":16.27},{"k":990,"iv":16.265},{"k":1000,"iv":15.376},{"k":1010,"iv":14.661},{"k":1020,"iv":14.403},{"k":1030,"iv":13.857},{"k":1040,"iv":13.938},{"k":1050,"iv":13.082},{"k":1060,"iv":13.162},{"k":1070,"iv":12.441},{"k":1080,"iv":12.424},{"k":1090,"iv":12.244},{"k":1100,"iv":12.128},{"k":1110,"iv":12.045},{"k":1120,"iv":11.767},{"k":1130,"iv":12.007},{"k":1140,"iv":12.147},{"k":1150,"iv":11.942}],"in_index":false,"in_index3m":true,"strict":{"vol":12.973,"F":1070.702,"K0":1070,"n":20,"rows":[{"k":960,"side":"put","bid":4.6,"ask":4.7,"q":4.65,"c":5.1e-05,"share":0.021664},{"k":970,"side":"put","bid":5,"ask":6,"q":5.5,"c":5.9e-05,"share":0.025098},{"k":980,"side":"put","bid":6.7,"ask":7,"q":6.85,"c":7.2e-05,"share":0.030624},{"k":990,"side":"put","bid":7.4,"ask":9.8,"q":8.6,"c":8.8e-05,"share":0.037675},{"k":1000,"side":"put","bid":8.8,"ask":9.8,"q":9.3,"c":9.3e-05,"share":0.03993},{"k":1010,"side":"put","bid":10.2,"ask":10.6,"q":10.4,"c":0.000102,"share":0.043774},{"k":1020,"side":"put","bid":12,"ask":13,"q":12.5,"c":0.000121,"share":0.051586},{"k":1030,"side":"put","bid":13.4,"ask":15.4,"q":14.4,"c":0.000136,"share":0.058279},{"k":1040,"side":"put","bid":17.6,"ask":18.2,"q":17.9,"c":0.000166,"share":0.071057},{"k":1050,"side":"put","bid":18.9,"ask":20.9,"q":19.9,"c":0.000181,"share":0.077499},{"k":1060,"side":"put","bid":23.6,"ask":25.1,"q":24.35,"c":0.000217,"share":0.093048},{"k":1070,"side":"atm","bid":null,"ask":null,"q":27.9,"c":0.000244,"share":0.10463},{"k":1080,"side":"call","bid":22.7,"ask":24.5,"q":23.6,"c":0.000203,"share":0.086873},{"k":1090,"side":"call","bid":18.8,"ask":19.5,"q":19.15,"c":0.000162,"share":0.069205},{"k":1100,"side":"call","bid":14.9,"ask":15.9,"q":15.4,"c":0.000128,"share":0.054646},{"k":1110,"side":"call","bid":11.5,"ask":13,"q":12.25,"c":0.0001,"share":0.042689},{"k":1120,"side":"call","bid":8.7,"ask":9.8,"q":9.25,"c":7.4e-05,"share":0.031661},{"k":1130,"side":"call","bid":7.1,"ask":8.1,"q":7.6,"c":6e-05,"share":0.025555},{"k":1140,"side":"call","bid":5.7,"ask":6.5,"q":6.1,"c":4.7e-05,"share":0.020153},{"k":1150,"side":"call","bid":4.3,"ask":4.6,"q":4.45,"c":3.4e-05,"share":0.014447}]},"tail":{"vol":13.637,"F":1070.702,"K0":1070,"n":44,"rows":[{"k":840,"side":"put-x","bid":null,"ask":null,"q":0.075683,"c":1e-06,"share":0.000417},{"k":850,"side":"put-x","bid":null,"ask":null,"q":0.117729,"c":2e-06,"share":0.000633},{"k":860,"side":"put-x","bid":null,"ask":null,"q":0.179445,"c":2e-06,"share":0.000943},{"k":870,"side":"put-x","bid":null,"ask":null,"q":0.268212,"c":4e-06,"share":0.001377},{"k":880,"side":"put-x","bid":null,"ask":null,"q":0.393417,"c":5e-06,"share":0.001974},{"k":890,"side":"put-x","bid":null,"ask":null,"q":0.566722,"c":7e-06,"share":0.00278},{"k":900,"side":"put-x","bid":null,"ask":null,"q":0.802296,"c":1e-05,"share":0.003848},{"k":910,"side":"put-x","bid":null,"ask":null,"q":1.116971,"c":1.4e-05,"share":0.005241},{"k":920,"side":"put-x","bid":null,"ask":null,"q":1.530307,"c":1.8e-05,"share":0.007025},{"k":930,"side":"put-x","bid":null,"ask":null,"q":2.064534,"c":2.4e-05,"share":0.009275},{"k":940,"side":"put-x","bid":null,"ask":null,"q":2.744367,"c":3.1e-05,"share":0.012068},{"k":950,"side":"put-x","bid":null,"ask":null,"q":3.596673,"c":4e-05,"share":0.015484},{"k":960,"side":"put","bid":4.6,"ask":4.7,"q":4.65,"c":5.1e-05,"share":0.019604},{"k":970,"side":"put","bid":5,"ask":6,"q":5.5,"c":5.9e-05,"share":0.022712},{"k":980,"side":"put","bid":6.7,"ask":7,"q":6.85,"c":7.2e-05,"share":0.027712},{"k":990,"side":"put","bid":7.4,"ask":9.8,"q":8.6,"c":8.8e-05,"share":0.034093},{"k":1000,"side":"put","bid":8.8,"ask":9.8,"q":9.3,"c":9.3e-05,"share":0.036134},{"k":1010,"side":"put","bid":10.2,"ask":10.6,"q":10.4,"c":0.000102,"share":0.039612},{"k":1020,"side":"put","bid":12,"ask":13,"q":12.5,"c":0.000121,"share":0.046681},{"k":1030,"side":"put","bid":13.4,"ask":15.4,"q":14.4,"c":0.000136,"share":0.052738},{"k":1040,"side":"put","bid":17.6,"ask":18.2,"q":17.9,"c":0.000166,"share":0.064302},{"k":1050,"side":"put","bid":18.9,"ask":20.9,"q":19.9,"c":0.000181,"share":0.070131},{"k":1060,"side":"put","bid":23.6,"ask":25.1,"q":24.35,"c":0.000217,"share":0.084202},{"k":1070,"side":"atm","bid":null,"ask":null,"q":27.9,"c":0.000244,"share":0.094683},{"k":1080,"side":"call","bid":22.7,"ask":24.5,"q":23.6,"c":0.000203,"share":0.078614},{"k":1090,"side":"call","bid":18.8,"ask":19.5,"q":19.15,"c":0.000162,"share":0.062625},{"k":1100,"side":"call","bid":14.9,"ask":15.9,"q":15.4,"c":0.000128,"share":0.04945},{"k":1110,"side":"call","bid":11.5,"ask":13,"q":12.25,"c":0.0001,"share":0.03863},{"k":1120,"side":"call","bid":8.7,"ask":9.8,"q":9.25,"c":7.4e-05,"share":0.028651},{"k":1130,"side":"call","bid":7.1,"ask":8.1,"q":7.6,"c":6e-05,"share":0.023126},{"k":1140,"side":"call","bid":5.7,"ask":6.5,"q":6.1,"c":4.7e-05,"share":0.018237},{"k":1150,"side":"call","bid":4.3,"ask":4.6,"q":4.45,"c":3.4e-05,"share":0.013074},{"k":1160,"side":"call-x","bid":null,"ask":null,"q":3.368904,"c":2.5e-05,"share":0.009728},{"k":1170,"side":"call-x","bid":null,"ask":null,"q":2.520809,"c":1.8e-05,"share":0.007155},{"k":1180,"side":"call-x","bid":null,"ask":null,"q":1.864392,"c":1.3e-05,"share":0.005202},{"k":1190,"side":"call-x","bid":null,"ask":null,"q":1.363052,"c":1e-05,"share":0.00374},{"k":1200,"side":"call-x","bid":null,"ask":null,"q":0.985155,"c":7e-06,"share":0.002658},{"k":1210,"side":"call-x","bid":null,"ask":null,"q":0.703979,"c":5e-06,"share":0.001868},{"k":1220,"side":"call-x","bid":null,"ask":null,"q":0.497426,"c":3e-06,"share":0.001299},{"k":1230,"side":"call-x","bid":null,"ask":null,"q":0.347591,"c":2e-06,"share":0.000893},{"k":1240,"side":"call-x","bid":null,"ask":null,"q":0.240237,"c":2e-06,"share":0.000607},{"k":1250,"side":"call-x","bid":null,"ask":null,"q":0.16425,"c":1e-06,"share":0.000408},{"k":1260,"side":"call-x","bid":null,"ask":null,"q":0.111105,"c":1e-06,"share":0.000272},{"k":1270,"side":"call-x","bid":null,"ask":null,"q":0.074369,"c":0.0,"share":0.000179}]}}],"warnings":[],"errors":[],"quotes_hash":"b5d1d2874fb79e5e","history":[{"t":"2026-09-11T08:33:07+00:00","vix":13.508,"strict":13.228,"spot":1075.29,"sd":"2026-09-11","vix3m":null},{"t":"2026-09-11T08:34:31+00:00","vix":13.509,"strict":13.228,"spot":1075.23,"sd":"2026-09-11","vix3m":null},{"t":"2026-09-11T08:35:04+00:00","vix":13.504,"strict":13.227,"spot":1075.57,"sd":"2026-09-11","vix3m":null},{"t":"2026-09-11T08:35:35+00:00","vix":13.498,"strict":13.221,"spot":1075.56,"sd":"2026-09-11","vix3m":null},{"t":"2026-09-11T08:37:42+00:00","vix":13.496,"strict":13.219,"spot":1074.47,"sd":"2026-09-11","vix3m":null},{"t":"2026-09-11T08:41:04+00:00","vix":13.502,"strict":13.222,"spot":1076.19,"sd":"2026-09-11","vix3m":null},{"t":"2026-09-11T08:41:54+00:00","vix":13.504,"strict":13.225,"spot":1075.76,"sd":"2026-09-11","vix3m":null},{"t":"2026-09-11T08:42:39+00:00","vix":13.504,"strict":13.225,"spot":1076.21,"sd":"2026-09-11","vix3m":null},{"t":"2026-09-11T11:00:02+00:00","vix":13.563,"strict":13.267,"spot":1074.59,"sd":"2026-09-11","vix3m":null},{"t":"2026-09-14T03:10:46+00:00","vix":13.625,"strict":13.323,"spot":1075.11,"sd":"2026-09-14","vix3m":null},{"t":"2026-09-14T03:15:22+00:00","vix":13.601,"strict":13.295,"spot":1075.28,"sd":"2026-09-14","vix3m":null},{"t":"2026-09-14T03:18:57+00:00","vix":13.656,"strict":13.323,"spot":1072.07,"sd":"2026-09-14","vix3m":null},{"t":"2026-09-14T11:00:09+00:00","vix":13.784,"strict":13.471,"spot":1070.37,"sd":"2026-09-14","vix3m":null},{"t":"2026-09-15T02:51:17+00:00","vix":13.685,"strict":13.37,"spot":1070.37,"sd":"2026-09-15","vix3m":null},{"t":"2026-09-15T11:00:06+00:00","vix":13.417,"strict":13.143,"spot":1069.46,"sd":"2026-09-15","vix3m":null},{"t":"2026-09-16T02:26:47+00:00","vix":12.858,"strict":10.603,"spot":1069.46,"sd":"2026-09-15","vix3m":null},{"t":"2026-09-16T02:30:53+00:00","vix":12.865,"strict":10.61,"spot":1069.46,"sd":"2026-09-15","vix3m":null},{"t":"2026-09-16T02:32:08+00:00","vix":12.87,"strict":10.617,"spot":1069.46,"sd":"2026-09-15","vix3m":null},{"t":"2026-09-16T05:11:42+00:00","vix":13.606,"strict":13.283,"spot":1063.34,"sd":"2026-09-16","vix3m":13.737},{"t":"2026-09-16T05:13:27+00:00","vix":13.599,"strict":13.276,"spot":1062.5,"sd":"2026-09-16","vix3m":13.725},{"t":"2026-09-16T05:25:44+00:00","vix":13.559,"strict":13.23,"spot":1061.99,"sd":"2026-09-16","vix3m":13.749},{"t":"2026-09-16T05:39:48+00:00","vix":13.46,"strict":13.11,"spot":1060.83,"sd":"2026-09-16","vix3m":13.69},{"t":"2026-09-16T05:47:48+00:00","vix":13.111,"strict":12.884,"spot":1062.53,"sd":"2026-09-16","vix3m":13.643},{"t":"2026-09-17T01:00:06+00:00","vix":14.337,"strict":12.709,"spot":1057.36,"sd":"2026-09-16","vix3m":13.713},{"t":"2026-09-18T01:00:07+00:00","vix":13.929,"strict":12.189,"spot":1069.77,"sd":"2026-09-17","vix3m":13.616},{"t":"2026-09-19T01:00:06+00:00","vix":13.169,"strict":12.84,"spot":1069.76,"sd":"2026-09-18","vix3m":13.443}],"realized":[{"d":"2024-06-28","rv":8.549},{"d":"2024-07-01","rv":8.517},{"d":"2024-07-02","rv":8.642},{"d":"2024-07-03","rv":8.919},{"d":"2024-07-04","rv":9.136},{"d":"2024-07-05","rv":9.206},{"d":"2024-07-08","rv":9.453},{"d":"2024-07-09","rv":8.733},{"d":"2024-07-10","rv":8.763},{"d":"2024-07-11","rv":8.909},{"d":"2024-07-12","rv":8.818},{"d":"2024-07-15","rv":8.789},{"d":"2024-07-16","rv":8.404},{"d":"2024-07-17","rv":8.396},{"d":"2024-07-18","rv":7.746},{"d":"2024-07-19","rv":7.876},{"d":"2024-07-23","rv":8.513},{"d":"2024-07-24","rv":8.09},{"d":"2024-07-25","rv":8.127},{"d":"2024-07-26","rv":9.302},{"d":"2024-07-30","rv":8.88},{"d":"2024-07-31","rv":9.177},{"d":"2024-08-01","rv":9.154},{"d":"2024-08-02","rv":9.055},{"d":"2024-08-05","rv":13.173},{"d":"2024-08-06","rv":13.058},{"d":"2024-08-07","rv":13.79},{"d":"2024-08-08","rv":13.593},{"d":"2024-08-09","rv":13.678},{"d":"2024-08-13","rv":13.612},{"d":"2024-08-14","rv":13.548},{"d":"2024-08-15","rv":13.547},{"d":"2024-08-16","rv":13.963},{"d":"2024-08-19","rv":14.718},{"d":"2024-08-20","rv":14.738},{"d":"2024-08-21","rv":14.821},{"d":"2024-08-22","rv":14.594},{"d":"2024-08-23","rv":14.347},{"d":"2024-08-26","rv":14.344},{"d":"2024-08-27","rv":14.261},{"d":"2024-08-28","rv":13.8},{"d":"2024-08-29","rv":14.162},{"d":"2024-08-30","rv":13.769},{"d":"2024-09-02","rv":13.887},{"d":"2024-09-03","rv":13.752},{"d":"2024-09-04","rv":9.137},{"d":"2024-09-05","rv":13.523},{"d":"2024-09-06","rv":13.98},{"d":"2024-09-09","rv":14.092},{"d":"2024-09-10","rv":14.335},{"d":"2024-09-11","rv":15.052},{"d":"2024-09-12","rv":14.684},{"d":"2024-09-13","rv":14.546},{"d":"2024-09-16","rv":14.449},{"d":"2024-09-17","rv":14.005},{"d":"2024-09-18","rv":14.137},{"d":"2024-09-19","rv":14.573},{"d":"2024-09-20","rv":14.844},{"d":"2024-09-23","rv":14.781},{"d":"2024-09-24","rv":15.032},{"d":"2024-09-25","rv":15.015},{"d":"2024-09-26","rv":15.241},{"d":"2024-09-27","rv":15.139},{"d":"2024-09-30","rv":15.186},{"d":"2024-10-01","rv":15.252},{"d":"2024-10-02","rv":15.675},{"d":"2024-10-03","rv":15.809},{"d":"2024-10-04","rv":11.69},{"d":"2024-10-07","rv":10.073},{"d":"2024-10-08","rv":10.061},{"d":"2024-10-09","rv":10.044},{"d":"2024-10-10","rv":9.649},{"d":"2024-10-11","rv":9.618},{"d":"2024-10-15","rv":9.647},{"d":"2024-10-16","rv":10.196},{"d":"2024-10-17","rv":10.486},{"d":"2024-10-18","rv":10.493},{"d":"2024-10-21","rv":9.67},{"d":"2024-10-22","rv":10.664},{"d":"2024-10-24","rv":11.093},{"d":"2024-10-25","rv":10.336},{"d":"2024-10-28","rv":10.979},{"d":"2024-10-29","rv":10.875},{"d":"2024-10-30","rv":10.722},{"d":"2024-10-31","rv":11.474},{"d":"2024-11-01","rv":10.836},{"d":"2024-11-04","rv":10.446},{"d":"2024-11-05","rv":11.534},{"d":"2024-11-06","rv":12.043},{"d":"2024-11-07","rv":11.972},{"d":"2024-11-08","rv":12.289},{"d":"2024-11-11","rv":12.372},{"d":"2024-11-12","rv":12.087},{"d":"2024-11-13","rv":12.216},{"d":"2024-11-14","rv":12.218},{"d":"2024-11-15","rv":11.501},{"d":"2024-11-18","rv":11.352},{"d":"2024-11-19","rv":11.613},{"d":"2024-11-20","rv":11.687},{"d":"2024-11-21","rv":12.936},{"d":"2024-11-22","rv":12.82},{"d":"2024-11-25","rv":12.795},{"d":"2024-11-26","rv":12.359},{"d":"2024-11-27","rv":12.517},{"d":"2024-11-28","rv":12.516},{"d":"2024-11-29","rv":11.64},{"d":"2024-12-02","rv":12.107},{"d":"2024-12-03","rv":13.11},{"d":"2024-12-04","rv":11.835},{"d":"2024-12-06","rv":11.549},{"d":"2024-12-09","rv":11.468},{"d":"2024-12-11","rv":11.288},{"d":"2024-12-12","rv":11.19},{"d":"2024-12-13","rv":11.293},{"d":"2024-12-16","rv":11.16},{"d":"2024-12-17","rv":12.747},{"d":"2024-12-18","rv":12.797},{"d":"2024-12-19","rv":13.341},{"d":"2024-12-20","rv":13.079},{"d":"2024-12-23","rv":14.895},{"d":"2024-12-24","rv":13.628},{"d":"2024-12-25","rv":13.539},{"d":"2024-12-26","rv":13.539},{"d":"2024-12-27","rv":13.586},{"d":"2024-12-30","rv":13.497},{"d":"2025-01-02","rv":14.494},{"d":"2025-01-03","rv":14.653},{"d":"2025-01-06","rv":14.388},{"d":"2025-01-07","rv":14.642},{"d":"2025-01-08","rv":14.618},{"d":"2025-01-09","rv":15.389},{"d":"2025-01-10","rv":15.618},{"d":"2025-01-13","rv":15.934},{"d":"2025-01-14","rv":16.087},{"d":"2025-01-15","rv":16.713},{"d":"2025-01-16","rv":16.707},{"d":"2025-01-17","rv":15.784},{"d":"2025-01-20","rv":15.716},{"d":"2025-01-21","rv":15.152},{"d":"2025-01-22","rv":15.121},{"d":"2025-01-23","rv":14.54},{"d":"2025-01-24","rv":14.709},{"d":"2025-01-27","rv":15.087},{"d":"2025-01-28","rv":15.176},{"d":"2025-01-29","rv":15.095},{"d":"2025-01-30","rv":15.161},{"d":"2025-01-31","rv":15.151},{"d":"2025-02-03","rv":15.082},{"d":"2025-02-04","rv":14.943},{"d":"2025-02-05","rv":13.802},{"d":"2025-02-06","rv":14.784},{"d":"2025-02-07","rv":16.292},{"d":"2025-02-10","rv":16.215},{"d":"2025-02-11","rv":16.472},{"d":"2025-02-13","rv":16.381},{"d":"2025-02-14","rv":16.056},{"d":"2025-02-17","rv":17.31},{"d":"2025-02-18","rv":17.23},{"d":"2025-02-19","rv":17.235},{"d":"2025-02-20","rv":17.149},{"d":"2025-02-21","rv":16.626},{"d":"2025-02-24","rv":16.345},{"d":"2025-02-25","rv":16.94},{"d":"2025-02-26","rv":19.366},{"d":"2025-02-27","rv":19.284},{"d":"2025-02-28","rv":19.294},{"d":"2025-03-03","rv":19.519},{"d":"2025-03-04","rv":19.343},{"d":"2025-03-05","rv":22.633},{"d":"2025-03-06","rv":22.957},{"d":"2025-03-07","rv":23.613},{"d":"2025-03-10","rv":24.043},{"d":"2025-03-11","rv":22.978},{"d":"2025-03-12","rv":23.983},{"d":"2025-03-13","rv":23.49},{"d":"2025-03-14","rv":24.328},{"d":"2025-03-17","rv":24.21},{"d":"2025-03-18","rv":23.783},{"d":"2025-03-19","rv":24.412},{"d":"2025-03-20","rv":24.422},{"d":"2025-03-21","rv":24.305},{"d":"2025-03-24","rv":24.425},{"d":"2025-03-25","rv":24.29},{"d":"2025-03-26","rv":22.991},{"d":"2025-03-27","rv":21.587},{"d":"2025-03-28","rv":21.514},{"d":"2025-03-31","rv":21.739},{"d":"2025-04-01","rv":21.58},{"d":"2025-04-02","rv":21.206},{"d":"2025-04-03","rv":19.232},{"d":"2025-04-04","rv":22.159},{"d":"2025-04-08","rv":25.92},{"d":"2025-04-09","rv":26.163},{"d":"2025-04-10","rv":31.295},{"d":"2025-04-11","rv":30.08},{"d":"2025-04-16","rv":30.128},{"d":"2025-04-17","rv":29.7},{"d":"2025-04-18","rv":29.854},{"d":"2025-04-21","rv":30.2},{"d":"2025-04-22","rv":30.03},{"d":"2025-04-23","rv":30.252},{"d":"2025-04-24","rv":30.155},{"d":"2025-04-25","rv":30.455},{"d":"2025-04-28","rv":30.456},{"d":"2025-04-29","rv":30.841},{"d":"2025-04-30","rv":32.417},{"d":"2025-05-02","rv":32.116},{"d":"2025-05-06","rv":31.83},{"d":"2025-05-07","rv":33.278},{"d":"2025-05-08","rv":33.702},{"d":"2025-05-09","rv":33.291},{"d":"2025-05-13","rv":30.092},{"d":"2025-05-14","rv":24.055},{"d":"2025-05-15","rv":25.418},{"d":"2025-05-16","rv":20.319},{"d":"2025-05-19","rv":20.646},{"d":"2025-05-20","rv":20.639},{"d":"2025-05-21","rv":20.86},{"d":"2025-05-22","rv":20.837},{"d":"2025-05-23","rv":19.81},{"d":"2025-05-26","rv":19.71},{"d":"2025-05-27","rv":20.376},{"d":"2025-05-28","rv":20.166},{"d":"2025-05-29","rv":19.796},{"d":"2025-05-30","rv":20.655},{"d":"2025-06-04","rv":20.681},{"d":"2025-06-05","rv":18.127},{"d":"2025-06-06","rv":18.104},{"d":"2025-06-09","rv":17.924},{"d":"2025-06-10","rv":13.61},{"d":"2025-06-11","rv":13.371},{"d":"2025-06-12","rv":13.277},{"d":"2025-06-13","rv":13.186},{"d":"2025-06-16","rv":12.821},{"d":"2025-06-17","rv":11.536},{"d":"2025-06-18","rv":12.632},{"d":"2025-06-19","rv":14.417},{"d":"2025-06-20","rv":14.231},{"d":"2025-06-23","rv":14.296},{"d":"2025-06-24","rv":20.946},{"d":"2025-06-25","rv":21.165},{"d":"2025-06-26","rv":21.079},{"d":"2025-06-27","rv":22.158},{"d":"2025-06-30","rv":22.452},{"d":"2025-07-01","rv":23.908},{"d":"2025-07-02","rv":23.438},{"d":"2025-07-03","rv":23.028},{"d":"2025-07-04","rv":22.915},{"d":"2025-07-07","rv":22.932},{"d":"2025-07-08","rv":23.039},{"d":"2025-07-09","rv":22.985},{"d":"2025-07-11","rv":23.241},{"d":"2025-07-14","rv":24.098},{"d":"2025-07-15","rv":24.529},{"d":"2025-07-16","rv":24.415},{"d":"2025-07-17","rv":27.465},{"d":"2025-07-18","rv":26.193},{"d":"2025-07-21","rv":23.91},{"d":"2025-07-22","rv":24.825},{"d":"2025-07-23","rv":25.521},{"d":"2025-07-24","rv":22.951},{"d":"2025-07-25","rv":22.933},{"d":"2025-07-29","rv":22.977},{"d":"2025-07-30","rv":19.913},{"d":"2025-07-31","rv":20.094},{"d":"2025-08-01","rv":21.793},{"d":"2025-08-04","rv":21.958},{"d":"2025-08-05","rv":22.047},{"d":"2025-08-06","rv":21.544},{"d":"2025-08-07","rv":21.583},{"d":"2025-08-08","rv":21.7},{"d":"2025-08-13","rv":21.574},{"d":"2025-08-14","rv":22.451},{"d":"2025-08-15","rv":21.901},{"d":"2025-08-18","rv":22.179},{"d":"2025-08-19","rv":22.31},{"d":"2025-08-20","rv":18.668},{"d":"2025-08-21","rv":18.521},{"d":"2025-08-22","rv":18.57},{"d":"2025-08-25","rv":17.797},{"d":"2025-08-26","rv":16.361},{"d":"2025-08-27","rv":16.216},{"d":"2025-08-28","rv":16.161},{"d":"2025-08-29","rv":15.904},{"d":"2025-09-01","rv":15.952},{"d":"2025-09-02","rv":15.998},{"d":"2025-09-03","rv":13.854},{"d":"2025-09-04","rv":13.767},{"d":"2025-09-05","rv":13.514},{"d":"2025-09-08","rv":13.111},{"d":"2025-09-09","rv":13.355},{"d":"2025-09-10","rv":12.987},{"d":"2025-09-11","rv":12.382},{"d":"2025-09-12","rv":11.642},{"d":"2025-09-15","rv":11.542},{"d":"2025-09-16","rv":10.694},{"d":"2025-09-17","rv":10.364},{"d":"2025-09-18","rv":9.967},{"d":"2025-09-19","rv":10.184},{"d":"2025-09-22","rv":10.397},{"d":"2025-09-23","rv":10.307},{"d":"2025-09-24","rv":9.845},{"d":"2025-09-25","rv":10.213},{"d":"2025-09-26","rv":10.755},{"d":"2025-09-29","rv":10.35},{"d":"2025-09-30","rv":10.939},{"d":"2025-10-01","rv":10.909},{"d":"2025-10-02","rv":11.051},{"d":"2025-10-03","rv":10.531},{"d":"2025-10-06","rv":10.611},{"d":"2025-10-07","rv":11.574},{"d":"2025-10-08","rv":11.363},{"d":"2025-10-09","rv":11.776},{"d":"2025-10-10","rv":13.248},{"d":"2025-10-14","rv":14.3},{"d":"2025-10-15","rv":15.419},{"d":"2025-10-16","rv":15.323},{"d":"2025-10-17","rv":15.834},{"d":"2025-10-20","rv":16.183},{"d":"2025-10-21","rv":16.169},{"d":"2025-10-22","rv":16.378},{"d":"2025-10-24","rv":16.551},{"d":"2025-10-27","rv":16.566},{"d":"2025-10-28","rv":16.754},{"d":"2025-10-29","rv":16.353},{"d":"2025-10-30","rv":16.045},{"d":"2025-10-31","rv":15.609},{"d":"2025-11-03","rv":15.6},{"d":"2025-11-04","rv":15.664},{"d":"2025-11-05","rv":15.606},{"d":"2025-11-06","rv":15.865},{"d":"2025-11-07","rv":15.389},{"d":"2025-11-10","rv":15.426},{"d":"2025-11-11","rv":15.104},{"d":"2025-11-12","rv":14.186},{"d":"2025-11-13","rv":12.906},{"d":"2025-11-14","rv":12.662},{"d":"2025-11-17","rv":13.161},{"d":"2025-11-18","rv":12.769},{"d":"2025-11-19","rv":12.234},{"d":"2025-11-20","rv":12.528},{"d":"2025-11-21","rv":13.776},{"d":"2025-11-24","rv":12.918},{"d":"2025-11-25","rv":13.809},{"d":"2025-11-26","rv":13.645},{"d":"2025-11-27","rv":13.697},{"d":"2025-11-28","rv":13.779},{"d":"2025-12-01","rv":15.2},{"d":"2025-12-02","rv":15.215},{"d":"2025-12-03","rv":14.983},{"d":"2025-12-04","rv":14.996},{"d":"2025-12-08","rv":14.401},{"d":"2025-12-09","rv":14.485},{"d":"2025-12-11","rv":14.846},{"d":"2025-12-12","rv":14.813},{"d":"2025-12-15","rv":15.457},{"d":"2025-12-16","rv":15.806},{"d":"2025-12-17","rv":15.078},{"d":"2025-12-18","rv":14.62},{"d":"2025-12-19","rv":14.367},{"d":"2025-12-22","rv":15.038},{"d":"2025-12-23","rv":14.793},{"d":"2025-12-24","rv":12.621},{"d":"2025-12-25","rv":12.956},{"d":"2025-12-26","rv":12.323},{"d":"2025-12-29","rv":12.335},{"d":"2025-12-30","rv":12.182},{"d":"2026-01-05","rv":13.096},{"d":"2026-01-06","rv":11.997},{"d":"2026-01-07","rv":12.022},{"d":"2026-01-08","rv":13.177},{"d":"2026-01-09","rv":13.16},{"d":"2026-01-12","rv":13.125},{"d":"2026-01-13","rv":12.911},{"d":"2026-01-14","rv":12.859},{"d":"2026-01-15","rv":13.521},{"d":"2026-01-16","rv":13.202},{"d":"2026-01-19","rv":12.658},{"d":"2026-01-20","rv":12.964},{"d":"2026-01-21","rv":13.446},{"d":"2026-01-22","rv":13.873},{"d":"2026-01-23","rv":13.359},{"d":"2026-01-26","rv":13.534},{"d":"2026-01-27","rv":14.697},{"d":"2026-01-28","rv":14.31},{"d":"2026-01-29","rv":14.509},{"d":"2026-01-30","rv":14.553},{"d":"2026-02-02","rv":14.568},{"d":"2026-02-03","rv":14.201},{"d":"2026-02-04","rv":14.318},{"d":"2026-02-05","rv":14.339},{"d":"2026-02-06","rv":12.702},{"d":"2026-02-09","rv":16.692},{"d":"2026-02-10","rv":16.096},{"d":"2026-02-11","rv":15.913},{"d":"2026-02-12","rv":16.833},{"d":"2026-02-13","rv":17.484},{"d":"2026-02-16","rv":17.293},{"d":"2026-02-17","rv":17.549},{"d":"2026-02-18","rv":17.488},{"d":"2026-02-19","rv":17.738},{"d":"2026-02-20","rv":17.851},{"d":"2026-02-23","rv":18.043},{"d":"2026-02-24","rv":17.651},{"d":"2026-02-25","rv":17.468},{"d":"2026-02-26","rv":17.498},{"d":"2026-02-27","rv":17.459},{"d":"2026-03-02","rv":23.696},{"d":"2026-03-04","rv":31.731},{"d":"2026-03-05","rv":32.159},{"d":"2026-03-06","rv":32.092},{"d":"2026-03-09","rv":33.035},{"d":"2026-03-10","rv":33.394},{"d":"2026-03-11","rv":30.921},{"d":"2026-03-12","rv":31.458},{"d":"2026-03-13","rv":31.853},{"d":"2026-03-16","rv":30.695},{"d":"2026-03-17","rv":31.668},{"d":"2026-03-18","rv":31.634},{"d":"2026-03-19","rv":31.43},{"d":"2026-03-20","rv":31.695},{"d":"2026-03-23","rv":31.9},{"d":"2026-03-24","rv":32.217},{"d":"2026-03-25","rv":34.157},{"d":"2026-03-26","rv":34.064},{"d":"2026-03-27","rv":33.502},{"d":"2026-03-30","rv":33.301},{"d":"2026-03-31","rv":33.306},{"d":"2026-04-01","rv":30.505},{"d":"2026-04-02","rv":22.808},{"d":"2026-04-03","rv":22.251},{"d":"2026-04-07","rv":22.157},{"d":"2026-04-08","rv":20.802},{"d":"2026-04-09","rv":20.37},{"d":"2026-04-10","rv":20.358},{"d":"2026-04-16","rv":19.828},{"d":"2026-04-17","rv":19.323},{"d":"2026-04-20","rv":19.328},{"d":"2026-04-21","rv":17.944},{"d":"2026-04-22","rv":17.956},{"d":"2026-04-23","rv":17.683},{"d":"2026-04-24","rv":17.361},{"d":"2026-04-27","rv":15.062},{"d":"2026-04-28","rv":14.727},{"d":"2026-04-29","rv":10.684},{"d":"2026-04-30","rv":10.37},{"d":"2026-05-05","rv":10.338},{"d":"2026-05-06","rv":11.585},{"d":"2026-05-07","rv":11.669},{"d":"2026-05-08","rv":11.151},{"d":"2026-05-11","rv":11.269},{"d":"2026-05-12","rv":10.857},{"d":"2026-05-13","rv":11.631},{"d":"2026-05-14","rv":12.536},{"d":"2026-05-15","rv":13.289},{"d":"2026-05-18","rv":13.243},{"d":"2026-05-19","rv":12.976},{"d":"2026-05-20","rv":12.593},{"d":"2026-05-21","rv":12.48},{"d":"2026-05-22","rv":12.475},{"d":"2026-05-25","rv":12.575},{"d":"2026-05-26","rv":11.779},{"d":"2026-05-27","rv":11.606},{"d":"2026-05-28","rv":11.458},{"d":"2026-05-29","rv":11.466},{"d":"2026-06-02","rv":12.199},{"d":"2026-06-04","rv":12.133},{"d":"2026-06-05","rv":12.295},{"d":"2026-06-08","rv":12.393},{"d":"2026-06-09","rv":12.351},{"d":"2026-06-10","rv":12.803},{"d":"2026-06-11","rv":12.549},{"d":"2026-06-12","rv":13.13},{"d":"2026-06-15","rv":12.512},{"d":"2026-06-16","rv":11.028},{"d":"2026-06-17","rv":9.988},{"d":"2026-06-18","rv":10.012},{"d":"2026-06-19","rv":10.223},{"d":"2026-06-22","rv":10.161},{"d":"2026-06-23","rv":12.011},{"d":"2026-06-24","rv":12.166},{"d":"2026-06-25","rv":11.934},{"d":"2026-06-26","rv":11.977},{"d":"2026-06-29","rv":13.689},{"d":"2026-06-30","rv":13.785},{"d":"2026-07-01","rv":13.893},{"d":"2026-07-02","rv":13.464},{"d":"2026-07-03","rv":13.991},{"d":"2026-07-06","rv":13.883},{"d":"2026-07-07","rv":13.195},{"d":"2026-07-08","rv":14.265},{"d":"2026-07-09","rv":14.714},{"d":"2026-07-10","rv":14.785},{"d":"2026-07-13","rv":14.254},{"d":"2026-07-14","rv":14.234},{"d":"2026-07-15","rv":14.241},{"d":"2026-07-16","rv":14.325},{"d":"2026-07-17","rv":14.339},{"d":"2026-07-20","rv":14.203},{"d":"2026-07-21","rv":14.17},{"d":"2026-07-22","rv":12.972},{"d":"2026-07-23","rv":13.056},{"d":"2026-07-24","rv":13.054},{"d":"2026-07-27","rv":13.271},{"d":"2026-07-30","rv":12.54},{"d":"2026-07-31","rv":12.843},{"d":"2026-08-03","rv":12.716},{"d":"2026-08-04","rv":12.369},{"d":"2026-08-05","rv":11.924},{"d":"2026-08-06","rv":12.118},{"d":"2026-08-07","rv":11.949},{"d":"2026-08-10","rv":10.538},{"d":"2026-08-11","rv":9.221},{"d":"2026-08-13","rv":9.003},{"d":"2026-08-14","rv":9.095},{"d":"2026-08-17","rv":9.527},{"d":"2026-08-18","rv":9.517},{"d":"2026-08-19","rv":9.585},{"d":"2026-08-20","rv":9.328},{"d":"2026-08-21","rv":9.063},{"d":"2026-08-24","rv":9.201},{"d":"2026-08-25","rv":8.624},{"d":"2026-08-26","rv":8.728},{"d":"2026-08-27","rv":8.668},{"d":"2026-08-28","rv":8.606},{"d":"2026-08-31","rv":8.191},{"d":"2026-09-01","rv":7.058},{"d":"2026-09-02","rv":7.477},{"d":"2026-09-03","rv":7.606},{"d":"2026-09-04","rv":7.977},{"d":"2026-09-07","rv":8.163},{"d":"2026-09-08","rv":8.165},{"d":"2026-09-09","rv":8.135},{"d":"2026-09-10","rv":8.072},{"d":"2026-09-11","rv":8.403},{"d":"2026-09-14","rv":8.361},{"d":"2026-09-15","rv":7.732},{"d":"2026-09-16","rv":8.576},{"d":"2026-09-17","rv":9.347},{"d":"2026-09-18","rv":9.344}],"futures":[{"d":"2024-06-28","c":803.1},{"d":"2024-07-01","c":802.0},{"d":"2024-07-02","c":793.4},{"d":"2024-07-03","c":799.9},{"d":"2024-07-04","c":805.1},{"d":"2024-07-05","c":809.9},{"d":"2024-07-08","c":811.9},{"d":"2024-07-09","c":810.8},{"d":"2024-07-10","c":813.5},{"d":"2024-07-11","c":818.2},{"d":"2024-07-12","c":822.2},{"d":"2024-07-15","c":821.0},{"d":"2024-07-16","c":816.7},{"d":"2024-07-17","c":820.5},{"d":"2024-07-18","c":824.2},{"d":"2024-07-19","c":818.4},{"d":"2024-07-23","c":812.7},{"d":"2024-07-24","c":809.2},{"d":"2024-07-25","c":805.2},{"d":"2024-07-26","c":816.3},{"d":"2024-07-30","c":817.0},{"d":"2024-07-31","c":827.0},{"d":"2024-08-01","c":825.8},{"d":"2024-08-02","c":816.6},{"d":"2024-08-05","c":797.9},{"d":"2024-08-06","c":796.0},{"d":"2024-08-07","c":811.8},{"d":"2024-08-08","c":807.8},{"d":"2024-08-09","c":813.4},{"d":"2024-08-13","c":812.4},{"d":"2024-08-14","c":811.6},{"d":"2024-08-15","c":811.6},{"d":"2024-08-16","c":818.7},{"d":"2024-08-19","c":832.1},{"d":"2024-08-20","c":834.4},{"d":"2024-08-21","c":840.8},{"d":"2024-08-22","c":840.3},{"d":"2024-08-23","c":849.7},{"d":"2024-08-26","c":857.6},{"d":"2024-08-27","c":856.7},{"d":"2024-08-28","c":861.1},{"d":"2024-08-29","c":855.3},{"d":"2024-08-30","c":853.5},{"d":"2024-09-02","c":849.8},{"d":"2024-09-03","c":855.8},{"d":"2024-09-04","c":854.8},{"d":"2024-09-05","c":890.3},{"d":"2024-09-06","c":905.4},{"d":"2024-09-09","c":900.0},{"d":"2024-09-10","c":898.8},{"d":"2024-09-11","c":892.7},{"d":"2024-09-12","c":897.1},{"d":"2024-09-13","c":899.7},{"d":"2024-09-16","c":903.0},{"d":"2024-09-17","c":904.2},{"d":"2024-09-18","c":903.1},{"d":"2024-09-19","c":915.8},{"d":"2024-09-20","c":910.3},{"d":"2024-09-23","c":910.4},{"d":"2024-09-24","c":925.4},{"d":"2024-09-25","c":922.8},{"d":"2024-09-26","c":921.5},{"d":"2024-09-27","c":916.4},{"d":"2024-09-30","c":914.7},{"d":"2024-10-01","c":924.8},{"d":"2024-10-02","c":914.6},{"d":"2024-10-03","c":911.7},{"d":"2024-10-04","c":913.8},{"d":"2024-10-07","c":919.5},{"d":"2024-10-08","c":919.7},{"d":"2024-10-09","c":922.9},{"d":"2024-10-10","c":932.7},{"d":"2024-10-11","c":934.3},{"d":"2024-10-15","c":934.8},{"d":"2024-10-16","c":948.9},{"d":"2024-10-17","c":956.8},{"d":"2024-10-18","c":956.6},{"d":"2024-10-21","c":951.8},{"d":"2024-10-22","c":940.0},{"d":"2024-10-24","c":936.0},{"d":"2024-10-25","c":939.9},{"d":"2024-10-28","c":929.5},{"d":"2024-10-29","c":929.8},{"d":"2024-10-30","c":923.6},{"d":"2024-10-31","c":937.2},{"d":"2024-11-01","c":936.2},{"d":"2024-11-04","c":938.8},{"d":"2024-11-05","c":952.5},{"d":"2024-11-06","c":944.6},{"d":"2024-11-07","c":949.6},{"d":"2024-11-08","c":941.1},{"d":"2024-11-11","c":937.5},{"d":"2024-11-12","c":932.2},{"d":"2024-11-13","c":936.4},{"d":"2024-11-14","c":935.6},{"d":"2024-11-15","c":932.7},{"d":"2024-11-18","c":940.3},{"d":"2024-11-19","c":945.2},{"d":"2024-11-20","c":946.8},{"d":"2024-11-21","c":930.2},{"d":"2024-11-22","c":933.8},{"d":"2024-11-25","c":934.4},{"d":"2024-11-26","c":930.8},{"d":"2024-11-27","c":924.4},{"d":"2024-11-28","c":924.5},{"d":"2024-11-29","c":920.5},{"d":"2024-12-02","c":929.4},{"d":"2024-12-03","c":939.6},{"d":"2024-12-04","c":936.7},{"d":"2024-12-06","c":938.7},{"d":"2024-12-09","c":934.6},{"d":"2024-12-11","c":933.4},{"d":"2024-12-12","c":931.1},{"d":"2024-12-13","c":923.4},{"d":"2024-12-16","c":921.2},{"d":"2024-12-17","c":902.7},{"d":"2024-12-18","c":906.0},{"d":"2024-12-19","c":891.3},{"d":"2024-12-20","c":883.4},{"d":"2024-12-23","c":900.0},{"d":"2024-12-24","c":903.9},{"d":"2024-12-25","c":908.4},{"d":"2024-12-26","c":906.5},{"d":"2024-12-27","c":905.4},{"d":"2024-12-30","c":903.5},{"d":"2025-01-02","c":887.1},{"d":"2025-01-03","c":892.8},{"d":"2025-01-06","c":886.1},{"d":"2025-01-07","c":901.6},{"d":"2025-01-08","c":896.8},{"d":"2025-01-09","c":881.8},{"d":"2025-01-10","c":888.3},{"d":"2025-01-13","c":878.6},{"d":"2025-01-14","c":868.9},{"d":"2025-01-15","c":880.6},{"d":"2025-01-16","c":879.6},{"d":"2025-01-17","c":872.8},{"d":"2025-01-20","c":873.3},{"d":"2025-01-21","c":881.2},{"d":"2025-01-22","c":886.5},{"d":"2025-01-23","c":873.8},{"d":"2025-01-24","c":881.5},{"d":"2025-01-27","c":871.3},{"d":"2025-01-28","c":874.1},{"d":"2025-01-29","c":871.1},{"d":"2025-01-30","c":867.0},{"d":"2025-01-31","c":854.1},{"d":"2025-02-03","c":843.0},{"d":"2025-02-04","c":844.9},{"d":"2025-02-05","c":832.5},{"d":"2025-02-06","c":817.0},{"d":"2025-02-07","c":831.1},{"d":"2025-02-10","c":823.4},{"d":"2025-02-11","c":830.5},{"d":"2025-02-13","c":830.9},{"d":"2025-02-14","c":824.3},{"d":"2025-02-17","c":805.1},{"d":"2025-02-18","c":803.6},{"d":"2025-02-19","c":804.7},{"d":"2025-02-20","c":789.1},{"d":"2025-02-21","c":791.0},{"d":"2025-02-24","c":784.0},{"d":"2025-02-25","c":762.2},{"d":"2025-02-26","c":780.0},{"d":"2025-02-27","c":771.1},{"d":"2025-02-28","c":760.6},{"d":"2025-03-03","c":753.9},{"d":"2025-03-04","c":742.7},{"d":"2025-03-05","c":763.6},{"d":"2025-03-06","c":750.2},{"d":"2025-03-07","c":761.7},{"d":"2025-03-10","c":743.1},{"d":"2025-03-11","c":748.9},{"d":"2025-03-12","c":730.9},{"d":"2025-03-13","c":732.4},{"d":"2025-03-14","c":739.9},{"d":"2025-03-17","c":740.1},{"d":"2025-03-18","c":745.1},{"d":"2025-03-19","c":751.2},{"d":"2025-03-20","c":745.4},{"d":"2025-03-21","c":753.9},{"d":"2025-03-24","c":756.6},{"d":"2025-03-25","c":755.7},{"d":"2025-03-26","c":758.6},{"d":"2025-03-27","c":757.6},{"d":"2025-03-28","c":741.0},{"d":"2025-03-31","c":730.5},{"d":"2025-04-01","c":741.8},{"d":"2025-04-02","c":744.3},{"d":"2025-04-03","c":732.4},{"d":"2025-04-04","c":705.9},{"d":"2025-04-08","c":669.7},{"d":"2025-04-09","c":681.9},{"d":"2025-04-10","c":724.7},{"d":"2025-04-11","c":717.6},{"d":"2025-04-16","c":725.4},{"d":"2025-04-17","c":723.4},{"d":"2025-04-18","c":731.9},{"d":"2025-04-21","c":719.8},{"d":"2025-04-22","c":726.5},{"d":"2025-04-23","c":734.8},{"d":"2025-04-24","c":730.6},{"d":"2025-04-25","c":740.0},{"d":"2025-04-28","c":740.9},{"d":"2025-04-29","c":750.7},{"d":"2025-04-30","c":773.4},{"d":"2025-05-02","c":772.3},{"d":"2025-05-06","c":764.6},{"d":"2025-05-07","c":790.8},{"d":"2025-05-08","c":781.2},{"d":"2025-05-09","c":787.4},{"d":"2025-05-13","c":787.6},{"d":"2025-05-14","c":793.3},{"d":"2025-05-15","c":778.4},{"d":"2025-05-16","c":777.6},{"d":"2025-05-19","c":770.0},{"d":"2025-05-20","c":774.7},{"d":"2025-05-21","c":766.3},{"d":"2025-05-22","c":766.3},{"d":"2025-05-23","c":768.1},{"d":"2025-05-26","c":769.5},{"d":"2025-05-27","c":758.2},{"d":"2025-05-28","c":754.1},{"d":"2025-05-29","c":758.6},{"d":"2025-05-30","c":739.1},{"d":"2025-06-04","c":734.5},{"d":"2025-06-05","c":737.7},{"d":"2025-06-06","c":736.9},{"d":"2025-06-09","c":735.9},{"d":"2025-06-10","c":736.9},{"d":"2025-06-11","c":742.9},{"d":"2025-06-12","c":728.0},{"d":"2025-06-13","c":729.3},{"d":"2025-06-16","c":726.8},{"d":"2025-06-17","c":723.6},{"d":"2025-06-18","c":710.3},{"d":"2025-06-19","c":692.1},{"d":"2025-06-20","c":695.7},{"d":"2025-06-23","c":691.4},{"d":"2025-06-24","c":721.0},{"d":"2025-06-25","c":723.4},{"d":"2025-06-26","c":722.6},{"d":"2025-06-27","c":699.0},{"d":"2025-06-30","c":702.9},{"d":"2025-07-01","c":718.7},{"d":"2025-07-02","c":718.4},{"d":"2025-07-03","c":724.3},{"d":"2025-07-04","c":719.8},{"d":"2025-07-07","c":723.3},{"d":"2025-07-08","c":717.7},{"d":"2025-07-09","c":716.4},{"d":"2025-07-11","c":721.4},{"d":"2025-07-14","c":735.9},{"d":"2025-07-15","c":749.8},{"d":"2025-07-16","c":748.2},{"d":"2025-07-17","c":775.9},{"d":"2025-07-18","c":786.9},{"d":"2025-07-21","c":784.6},{"d":"2025-07-22","c":773.4},{"d":"2025-07-23","c":792.9},{"d":"2025-07-24","c":787.9},{"d":"2025-07-25","c":792.4},{"d":"2025-07-29","c":804.6},{"d":"2025-07-30","c":808.9},{"d":"2025-07-31","c":807.2},{"d":"2025-08-01","c":791.2},{"d":"2025-08-04","c":798.5},{"d":"2025-08-05","c":805.8},{"d":"2025-08-06","c":815.9},{"d":"2025-08-07","c":818.9},{"d":"2025-08-08","c":811.3},{"d":"2025-08-13","c":823.5},{"d":"2025-08-14","c":815.1},{"d":"2025-08-15","c":812.4},{"d":"2025-08-18","c":802.0},{"d":"2025-08-19","c":796.7},{"d":"2025-08-20","c":807.7},{"d":"2025-08-21","c":807.9},{"d":"2025-08-22","c":814.4},{"d":"2025-08-25","c":819.1},{"d":"2025-08-26","c":809.0},{"d":"2025-08-27","c":806.7},{"d":"2025-08-28","c":806.9},{"d":"2025-08-29","c":799.2},{"d":"2025-09-01","c":805.8},{"d":"2025-09-02","c":811.1},{"d":"2025-09-03","c":815.6},{"d":"2025-09-04","c":805.2},{"d":"2025-09-05","c":816.0},{"d":"2025-09-08","c":812.8},{"d":"2025-09-09","c":819.7},{"d":"2025-09-10","c":817.2},{"d":"2025-09-11","c":829.6},{"d":"2025-09-12","c":830.5},{"d":"2025-09-15","c":833.2},{"d":"2025-09-16","c":839.3},{"d":"2025-09-17","c":839.1},{"d":"2025-09-18","c":834.8},{"d":"2025-09-19","c":831.4},{"d":"2025-09-22","c":825.9},{"d":"2025-09-23","c":820.3},{"d":"2025-09-24","c":820.6},{"d":"2025-09-25","c":830.9},{"d":"2025-09-26","c":824.9},{"d":"2025-09-29","c":825.4},{"d":"2025-09-30","c":815.8},{"d":"2025-10-01","c":818.8},{"d":"2025-10-02","c":825.9},{"d":"2025-10-03","c":830.3},{"d":"2025-10-06","c":827.7},{"d":"2025-10-07","c":837.5},{"d":"2025-10-08","c":835.8},{"d":"2025-10-09","c":845.4},{"d":"2025-10-10","c":827.3},{"d":"2025-10-14","c":816.1},{"d":"2025-10-15","c":827.1},{"d":"2025-10-16","c":831.5},{"d":"2025-10-17","c":819.9},{"d":"2025-10-20","c":830.7},{"d":"2025-10-21","c":836.4},{"d":"2025-10-22","c":843.2},{"d":"2025-10-24","c":860.6},{"d":"2025-10-27","c":863.1},{"d":"2025-10-28","c":856.7},{"d":"2025-10-29","c":856.0},{"d":"2025-10-30","c":850.6},{"d":"2025-10-31","c":851.4},{"d":"2025-11-03","c":847.6},{"d":"2025-11-04","c":839.1},{"d":"2025-11-05","c":841.7},{"d":"2025-11-06","c":852.9},{"d":"2025-11-07","c":846.3},{"d":"2025-11-10","c":847.9},{"d":"2025-11-11","c":847.7},{"d":"2025-11-12","c":837.4},{"d":"2025-11-13","c":838.7},{"d":"2025-11-14","c":826.3},{"d":"2025-11-17","c":835.2},{"d":"2025-11-18","c":828.0},{"d":"2025-11-19","c":826.7},{"d":"2025-11-20","c":834.8},{"d":"2025-11-21","c":815.1},{"d":"2025-11-24","c":817.3},{"d":"2025-11-25","c":827.1},{"d":"2025-11-26","c":825.7},{"d":"2025-11-27","c":819.3},{"d":"2025-11-28","c":825.0},{"d":"2025-12-01","c":836.4},{"d":"2025-12-02","c":836.9},{"d":"2025-12-03","c":835.4},{"d":"2025-12-04","c":835.3},{"d":"2025-12-08","c":830.6},{"d":"2025-12-09","c":833.2},{"d":"2025-12-11","c":829.5},{"d":"2025-12-12","c":827.2},{"d":"2025-12-15","c":841.7},{"d":"2025-12-16","c":834.4},{"d":"2025-12-17","c":830.7},{"d":"2025-12-18","c":828.2},{"d":"2025-12-19","c":829.6},{"d":"2025-12-22","c":837.6},{"d":"2025-12-23","c":842.8},{"d":"2025-12-24","c":843.2},{"d":"2025-12-25","c":840.4},{"d":"2025-12-26","c":835.2},{"d":"2025-12-29","c":823.5},{"d":"2025-12-30","c":829.5},{"d":"2026-01-05","c":842.9},{"d":"2026-01-06","c":835.4},{"d":"2026-01-07","c":837.3},{"d":"2026-01-08","c":826.8},{"d":"2026-01-09","c":826.7},{"d":"2026-01-12","c":822.8},{"d":"2026-01-13","c":819.3},{"d":"2026-01-14","c":824.2},{"d":"2026-01-15","c":838.8},{"d":"2026-01-16","c":849.4},{"d":"2026-01-19","c":853.2},{"d":"2026-01-20","c":863.8},{"d":"2026-01-21","c":876.3},{"d":"2026-01-22","c":871.7},{"d":"2026-01-23","c":871.1},{"d":"2026-01-26","c":868.1},{"d":"2026-01-27","c":886.5},{"d":"2026-01-28","c":888.7},{"d":"2026-01-29","c":884.8},{"d":"2026-01-30","c":878.7},{"d":"2026-02-02","c":879.1},{"d":"2026-02-03","c":888.1},{"d":"2026-02-04","c":895.2},{"d":"2026-02-05","c":895.8},{"d":"2026-02-06","c":903.9},{"d":"2026-02-09","c":939.5},{"d":"2026-02-10","c":940.9},{"d":"2026-02-11","c":941.6},{"d":"2026-02-12","c":966.5},{"d":"2026-02-13","c":955.4},{"d":"2026-02-16","c":960.5},{"d":"2026-02-17","c":974.9},{"d":"2026-02-18","c":975.8},{"d":"2026-02-19","c":991.2},{"d":"2026-02-20","c":985.8},{"d":"2026-02-23","c":983.9},{"d":"2026-02-24","c":991.8},{"d":"2026-02-25","c":1006.0},{"d":"2026-02-26","c":1016.8},{"d":"2026-02-27","c":1013.7},{"d":"2026-03-02","c":976.2},{"d":"2026-03-04","c":917.2},{"d":"2026-03-05","c":940.7},{"d":"2026-03-06","c":929.5},{"d":"2026-03-09","c":919.1},{"d":"2026-03-10","c":930.9},{"d":"2026-03-11","c":930.7},{"d":"2026-03-12","c":950.1},{"d":"2026-03-13","c":935.4},{"d":"2026-03-16","c":932.2},{"d":"2026-03-17","c":954.6},{"d":"2026-03-18","c":956.6},{"d":"2026-03-19","c":942.7},{"d":"2026-03-20","c":952.1},{"d":"2026-03-23","c":928.2},{"d":"2026-03-24","c":942.0},{"d":"2026-03-25","c":965.4},{"d":"2026-03-26","c":961.1},{"d":"2026-03-27","c":964.3},{"d":"2026-03-30","c":956.1},{"d":"2026-03-31","c":961.4},{"d":"2026-04-01","c":975.0},{"d":"2026-04-02","c":965.3},{"d":"2026-04-03","c":962.5},{"d":"2026-04-07","c":967.8},{"d":"2026-04-08","c":978.4},{"d":"2026-04-09","c":978.1},{"d":"2026-04-10","c":986.9},{"d":"2026-04-16","c":976.6},{"d":"2026-04-17","c":970.8},{"d":"2026-04-20","c":965.8},{"d":"2026-04-21","c":970.7},{"d":"2026-04-22","c":969.9},{"d":"2026-04-23","c":958.6},{"d":"2026-04-24","c":956.1},{"d":"2026-04-27","c":966.2},{"d":"2026-04-28","c":963.5},{"d":"2026-04-29","c":970.9},{"d":"2026-04-30","c":973.8},{"d":"2026-05-05","c":971.3},{"d":"2026-05-06","c":989.6},{"d":"2026-05-07","c":985.6},{"d":"2026-05-08","c":978.8},{"d":"2026-05-11","c":976.6},{"d":"2026-05-12","c":975.8},{"d":"2026-05-13","c":986.1},{"d":"2026-05-14","c":1009.6},{"d":"2026-05-15","c":996.3},{"d":"2026-05-18","c":998.7},{"d":"2026-05-19","c":998.5},{"d":"2026-05-20","c":1004.4},{"d":"2026-05-21","c":1005.3},{"d":"2026-05-22","c":1007.1},{"d":"2026-05-25","c":1014.8},{"d":"2026-05-26","c":1012.3},{"d":"2026-05-27","c":1018.8},{"d":"2026-05-28","c":1013.5},{"d":"2026-05-29","c":1013.2},{"d":"2026-06-02","c":1034.2},{"d":"2026-06-04","c":1036.8},{"d":"2026-06-05","c":1031.8},{"d":"2026-06-08","c":1017.8},{"d":"2026-06-09","c":1020.3},{"d":"2026-06-10","c":1011.8},{"d":"2026-06-11","c":1018.3},{"d":"2026-06-12","c":1031.9},{"d":"2026-06-15","c":1029.0},{"d":"2026-06-16","c":1032.9},{"d":"2026-06-17","c":1031.4},{"d":"2026-06-18","c":1032.8},{"d":"2026-06-19","c":1026.6},{"d":"2026-06-22","c":1028.9},{"d":"2026-06-23","c":1013.2},{"d":"2026-06-24","c":1014.6},{"d":"2026-06-25","c":1014.5},{"d":"2026-06-26","c":1012.8},{"d":"2026-06-29","c":1031.1},{"d":"2026-06-30","c":1046.5},{"d":"2026-07-01","c":1041.1},{"d":"2026-07-02","c":1049.6},{"d":"2026-07-03","c":1065.2},{"d":"2026-07-06","c":1063.8},{"d":"2026-07-07","c":1057.6},{"d":"2026-07-08","c":1040.5},{"d":"2026-07-09","c":1055.0},{"d":"2026-07-10","c":1065.7},{"d":"2026-07-13","c":1071.9},{"d":"2026-07-14","c":1069.8},{"d":"2026-07-15","c":1073.3},{"d":"2026-07-16","c":1082.0},{"d":"2026-07-17","c":1088.5},{"d":"2026-07-20","c":1095.2},{"d":"2026-07-21","c":1096.7},{"d":"2026-07-22","c":1089.6},{"d":"2026-07-23","c":1085.3},{"d":"2026-07-24","c":1092.2},{"d":"2026-07-27","c":1083.8},{"d":"2026-07-30","c":1067.9},{"d":"2026-07-31","c":1084.1},{"d":"2026-08-03","c":1082.2},{"d":"2026-08-04","c":1080.6},{"d":"2026-08-05","c":1076.3},{"d":"2026-08-06","c":1083.2},{"d":"2026-08-07","c":1079.5},{"d":"2026-08-10","c":1082.1},{"d":"2026-08-11","c":1076.5},{"d":"2026-08-13","c":1077.0},{"d":"2026-08-14","c":1071.6},{"d":"2026-08-17","c":1084.9},{"d":"2026-08-18","c":1077.9},{"d":"2026-08-19","c":1072.6},{"d":"2026-08-20","c":1072.9},{"d":"2026-08-21","c":1080.7},{"d":"2026-08-24","c":1071.6},{"d":"2026-08-25","c":1072.9},{"d":"2026-08-26","c":1075.0},{"d":"2026-08-27","c":1070.5},{"d":"2026-08-28","c":1065.3},{"d":"2026-08-31","c":1068.3},{"d":"2026-09-01","c":1065.0},{"d":"2026-09-02","c":1058.1},{"d":"2026-09-03","c":1062.4},{"d":"2026-09-04","c":1072.2},{"d":"2026-09-07","c":1079.4},{"d":"2026-09-08","c":1083.5},{"d":"2026-09-09","c":1081.8},{"d":"2026-09-10","c":1082.3},{"d":"2026-09-11","c":1075.5},{"d":"2026-09-14","c":1070.1},{"d":"2026-09-15","c":1070.5},{"d":"2026-09-16","c":1057.7},{"d":"2026-09-17","c":1069.4},{"d":"2026-09-18","c":1069.3}],"daily":[{"d":"2024-09-11","vix":16.08,"strict":16.075,"spot":893.40002,"mode":"interpolated","vix3m":14.9,"strict3m":14.761},{"d":"2024-09-12","vix":15.697,"strict":15.697,"spot":897.32,"mode":"interpolated","vix3m":14.677,"strict3m":14.562},{"d":"2024-09-13","vix":15.308,"strict":15.314,"spot":899.81,"mode":"interpolated","vix3m":14.492,"strict3m":14.367},{"d":"2024-09-16","vix":15.291,"strict":15.284,"spot":904.75,"mode":"interpolated","vix3m":14.741,"strict3m":14.6},{"d":"2024-09-17","vix":14.989,"strict":14.995,"spot":906.5,"mode":"interpolated","vix3m":14.758,"strict3m":14.604},{"d":"2024-09-18","vix":14.854,"strict":14.861,"spot":904.9,"mode":"interpolated","vix3m":14.894,"strict3m":14.739},{"d":"2024-09-19","vix":15.143,"strict":15.144,"spot":917.74,"mode":"interpolated","vix3m":14.854,"strict3m":14.652},{"d":"2024-09-20","vix":14.793,"strict":14.803,"spot":913.59,"mode":"interpolated","vix3m":14.397,"strict3m":14.325},{"d":"2024-09-23","vix":14.423,"strict":14.419,"spot":913.23,"mode":"interpolated","vix3m":14.377,"strict3m":14.323},{"d":"2024-09-24","vix":14.604,"strict":14.605,"spot":924.61,"mode":"interpolated","vix3m":14.352,"strict3m":14.26},{"d":"2024-09-25","vix":14.264,"strict":14.269,"spot":924.27,"mode":"extrapolated","vix3m":14.191,"strict3m":14.115},{"d":"2024-09-26","vix":14.041,"strict":14.052,"spot":920.46,"mode":"extrapolated","vix3m":14.059,"strict3m":13.999},{"d":"2024-09-27","vix":13.912,"strict":13.926,"spot":915.43,"mode":"extrapolated","vix3m":13.94,"strict3m":13.809},{"d":"2024-09-30","vix":13.654,"strict":13.663,"spot":914.07,"mode":"interpolated","vix3m":13.649,"strict3m":13.589},{"d":"2024-10-01","vix":13.896,"strict":13.908,"spot":924.78,"mode":"interpolated","vix3m":13.712,"strict3m":13.625},{"d":"2024-10-02","vix":13.826,"strict":13.829,"spot":917.98,"mode":"interpolated","vix3m":13.949,"strict3m":13.867},{"d":"2024-10-03","vix":13.608,"strict":13.619,"spot":914.94,"mode":"interpolated","vix3m":13.877,"strict3m":13.797},{"d":"2024-10-04","vix":13.371,"strict":13.375,"spot":917.34,"mode":"interpolated","vix3m":13.863,"strict3m":13.776},{"d":"2024-10-07","vix":13.225,"strict":13.235,"spot":922.53,"mode":"interpolated","vix3m":14.153,"strict3m":14.027},{"d":"2024-10-08","vix":13.003,"strict":13.015,"spot":922.03,"mode":"interpolated","vix3m":14.0,"strict3m":13.884},{"d":"2024-10-09","vix":12.822,"strict":12.835,"spot":926.37,"mode":"interpolated","vix3m":13.942,"strict3m":13.806},{"d":"2024-10-10","vix":12.922,"strict":12.938,"spot":935.24,"mode":"interpolated","vix3m":13.906,"strict3m":13.749},{"d":"2024-10-11","vix":12.68,"strict":12.708,"spot":936.64,"mode":"interpolated","vix3m":13.838,"strict3m":13.668},{"d":"2024-10-15","vix":12.448,"strict":12.467,"spot":936.38,"mode":"interpolated","vix3m":13.722,"strict3m":13.557},{"d":"2024-10-16","vix":13.897,"strict":12.739,"spot":947.65,"mode":"interpolated","vix3m":13.698,"strict3m":13.471},{"d":"2024-10-17","vix":12.874,"strict":12.893,"spot":956.49,"mode":"interpolated","vix3m":13.881,"strict3m":13.718},{"d":"2024-10-18","vix":12.62,"strict":12.647,"spot":954.67,"mode":"interpolated","vix3m":13.92,"strict3m":13.729},{"d":"2024-10-21","vix":12.403,"strict":12.428,"spot":953.76,"mode":"interpolated","vix3m":14.086,"strict3m":13.877},{"d":"2024-10-22","vix":13.097,"strict":12.821,"spot":941.96,"mode":"interpolated","vix3m":14.194,"strict3m":14.0},{"d":"2024-10-24","vix":12.857,"strict":12.821,"spot":934.94,"mode":"interpolated","vix3m":14.328,"strict3m":14.11},{"d":"2024-10-25","vix":12.637,"strict":12.595,"spot":937.49,"mode":"interpolated","vix3m":13.876,"strict3m":13.746},{"d":"2024-10-28","vix":12.582,"strict":12.6,"spot":928.13,"mode":"extrapolated","vix3m":14.208,"strict3m":14.025},{"d":"2024-10-29","vix":12.536,"strict":12.553,"spot":927.31,"mode":"interpolated","vix3m":14.259,"strict3m":14.04},{"d":"2024-10-30","vix":12.553,"strict":12.565,"spot":924.99,"mode":"interpolated","vix3m":12.0,"strict3m":11.95},{"d":"2024-10-31","vix":13.05,"strict":13.061,"spot":936.69,"mode":"interpolated","vix3m":12.435,"strict3m":12.361},{"d":"2024-11-01","vix":13.021,"strict":13.03,"spot":935.77,"mode":"interpolated","vix3m":12.207,"strict3m":12.132},{"d":"2024-11-04","vix":13.435,"strict":13.436,"spot":937.15,"mode":"interpolated","vix3m":12.088,"strict3m":12.024},{"d":"2024-11-05","vix":13.984,"strict":13.974,"spot":952.29,"mode":"interpolated","vix3m":12.954,"strict3m":12.783},{"d":"2024-11-06","vix":14.125,"strict":14.126,"spot":944.56,"mode":"interpolated","vix3m":12.965,"strict3m":12.875},{"d":"2024-11-07","vix":14.126,"strict":14.128,"spot":947.96,"mode":"interpolated","vix3m":12.83,"strict3m":12.725},{"d":"2024-11-08","vix":14.225,"strict":14.226,"spot":941.49,"mode":"interpolated","vix3m":12.863,"strict3m":12.757},{"d":"2024-11-11","vix":14.593,"strict":14.598,"spot":936.93,"mode":"interpolated","vix3m":12.822,"strict3m":12.693},{"d":"2024-11-12","vix":14.494,"strict":14.506,"spot":931.81,"mode":"interpolated","vix3m":12.821,"strict3m":12.696},{"d":"2024-11-13","vix":14.282,"strict":14.287,"spot":936.61,"mode":"interpolated","vix3m":12.801,"strict3m":12.653},{"d":"2024-11-14","vix":14.056,"strict":14.066,"spot":935.95,"mode":"interpolated","vix3m":12.641,"strict3m":12.497},{"d":"2024-11-15","vix":14.265,"strict":14.283,"spot":931.56,"mode":"interpolated","vix3m":12.485,"strict3m":12.345},{"d":"2024-11-18","vix":14.613,"strict":14.357,"spot":938.91,"mode":"interpolated","vix3m":12.691,"strict3m":12.544},{"d":"2024-11-19","vix":14.657,"strict":14.243,"spot":944.85,"mode":"interpolated","vix3m":12.689,"strict3m":12.55},{"d":"2024-11-20","vix":14.61,"strict":14.117,"spot":948.03,"mode":"interpolated","vix3m":12.45,"strict3m":12.311},{"d":"2024-11-21","vix":14.972,"strict":14.966,"spot":929.11,"mode":"interpolated","vix3m":13.376,"strict3m":13.248},{"d":"2024-11-22","vix":14.821,"strict":14.815,"spot":933.61,"mode":"interpolated","vix3m":13.319,"strict3m":13.171},{"d":"2024-11-25","vix":14.917,"strict":14.909,"spot":931.75,"mode":"interpolated","vix3m":13.277,"strict3m":13.132},{"d":"2024-11-26","vix":15.15,"strict":15.145,"spot":928.55,"mode":"extrapolated","vix3m":13.222,"strict3m":13.069},{"d":"2024-11-27","vix":14.828,"strict":14.824,"spot":923.23,"mode":"interpolated","vix3m":13.304,"strict3m":13.119},{"d":"2024-11-28","vix":14.312,"strict":14.303,"spot":920.96,"mode":"interpolated","vix3m":12.181,"strict3m":12.127},{"d":"2024-11-29","vix":14.266,"strict":14.262,"spot":918.45,"mode":"interpolated","vix3m":12.121,"strict3m":12.062},{"d":"2024-12-02","vix":14.052,"strict":14.053,"spot":926.46,"mode":"interpolated","vix3m":12.377,"strict3m":12.308},{"d":"2024-12-03","vix":13.794,"strict":13.798,"spot":939.6,"mode":"interpolated","vix3m":12.783,"strict3m":12.682},{"d":"2024-12-04","vix":13.635,"strict":13.629,"spot":935.49,"mode":"interpolated","vix3m":12.75,"strict3m":12.68},{"d":"2024-12-06","vix":13.381,"strict":13.39,"spot":936.67,"mode":"interpolated","vix3m":12.729,"strict3m":12.647},{"d":"2024-12-09","vix":13.245,"strict":13.257,"spot":934.77,"mode":"interpolated","vix3m":12.874,"strict3m":12.768},{"d":"2024-12-11","vix":12.953,"strict":12.966,"spot":931.8,"mode":"interpolated","vix3m":13.028,"strict3m":12.914},{"d":"2024-12-12","vix":12.592,"strict":12.601,"spot":930.0,"mode":"interpolated","vix3m":13.148,"strict3m":13.026},{"d":"2024-12-13","vix":12.636,"strict":12.645,"spot":923.47,"mode":"interpolated","vix3m":13.211,"strict3m":13.068},{"d":"2024-12-16","vix":12.535,"strict":12.551,"spot":920.01,"mode":"interpolated","vix3m":13.373,"strict3m":13.226},{"d":"2024-12-17","vix":13.862,"strict":13.865,"spot":903.02,"mode":"interpolated","vix3m":14.348,"strict3m":14.104},{"d":"2024-12-18","vix":13.52,"strict":13.524,"spot":905.7,"mode":"interpolated","vix3m":14.46,"strict3m":14.351},{"d":"2024-12-19","vix":14.26,"strict":14.26,"spot":891.01,"mode":"interpolated","vix3m":14.803,"strict3m":14.626},{"d":"2024-12-20","vix":14.176,"strict":14.172,"spot":883.72,"mode":"interpolated","vix3m":15.271,"strict3m":14.977},{"d":"2024-12-23","vix":14.598,"strict":14.608,"spot":899.93,"mode":"interpolated","vix3m":14.666,"strict3m":14.576},{"d":"2024-12-24","vix":14.343,"strict":14.34,"spot":904.44,"mode":"interpolated","vix3m":14.603,"strict3m":14.527},{"d":"2024-12-25","vix":14.08,"strict":14.075,"spot":907.17,"mode":"extrapolated","vix3m":14.575,"strict3m":14.49},{"d":"2024-12-26","vix":13.806,"strict":13.783,"spot":906.41,"mode":"extrapolated","vix3m":14.621,"strict3m":14.549},{"d":"2024-12-27","vix":13.529,"strict":13.525,"spot":908.9,"mode":"extrapolated","vix3m":14.365,"strict3m":14.281},{"d":"2024-12-30","vix":13.354,"strict":13.367,"spot":906.23,"mode":"extrapolated","vix3m":14.265,"strict3m":14.162},{"d":"2025-01-02","vix":14.063,"strict":14.069,"spot":891.72,"mode":"interpolated","vix3m":14.728,"strict3m":14.566},{"d":"2025-01-03","vix":13.858,"strict":13.855,"spot":896.07,"mode":"interpolated","vix3m":14.414,"strict3m":14.285},{"d":"2025-01-06","vix":13.931,"strict":13.937,"spot":888.73,"mode":"interpolated","vix3m":14.197,"strict3m":14.049},{"d":"2025-01-07","vix":14.519,"strict":14.529,"spot":902.9,"mode":"interpolated","vix3m":13.771,"strict3m":13.644},{"d":"2025-01-08","vix":14.201,"strict":14.203,"spot":902.2,"mode":"interpolated","vix3m":13.748,"strict3m":13.609},{"d":"2025-01-09","vix":14.912,"strict":14.92,"spot":887.78,"mode":"interpolated","vix3m":13.985,"strict3m":13.806},{"d":"2025-01-10","vix":14.698,"strict":14.709,"spot":892.34,"mode":"interpolated","vix3m":13.968,"strict3m":13.807},{"d":"2025-01-13","vix":14.839,"strict":14.849,"spot":882.28,"mode":"interpolated","vix3m":14.499,"strict3m":14.294},{"d":"2025-01-14","vix":14.878,"strict":14.882,"spot":874.32,"mode":"interpolated","vix3m":14.601,"strict3m":14.417},{"d":"2025-01-15","vix":14.98,"strict":14.993,"spot":884.02,"mode":"interpolated","vix3m":14.387,"strict3m":14.244},{"d":"2025-01-16","vix":14.685,"strict":14.702,"spot":883.4,"mode":"interpolated","vix3m":14.348,"strict3m":14.208},{"d":"2025-01-17","vix":14.702,"strict":14.718,"spot":875.76,"mode":"interpolated","vix3m":14.349,"strict3m":14.215},{"d":"2025-01-20","vix":14.414,"strict":14.433,"spot":876.01,"mode":"interpolated","vix3m":14.684,"strict3m":14.51},{"d":"2025-01-21","vix":14.429,"strict":14.453,"spot":883.85,"mode":"interpolated","vix3m":14.5,"strict3m":14.356},{"d":"2025-01-22","vix":14.604,"strict":14.366,"spot":890.71,"mode":"interpolated","vix3m":14.387,"strict3m":14.239},{"d":"2025-01-23","vix":14.873,"strict":14.878,"spot":877.57,"mode":"interpolated","vix3m":14.572,"strict3m":14.411},{"d":"2025-01-24","vix":14.821,"strict":14.774,"spot":884.29,"mode":"interpolated","vix3m":14.566,"strict3m":14.409},{"d":"2025-01-27","vix":15.435,"strict":15.107,"spot":873.85,"mode":"interpolated","vix3m":14.967,"strict3m":14.738},{"d":"2025-01-28","vix":14.736,"strict":14.746,"spot":876.49,"mode":"interpolated","vix3m":14.914,"strict3m":14.7},{"d":"2025-01-29","vix":14.553,"strict":14.548,"spot":875.48,"mode":"interpolated","vix3m":14.722,"strict3m":14.503},{"d":"2025-01-30","vix":14.564,"strict":14.555,"spot":870.26,"mode":"interpolated","vix3m":13.939,"strict3m":13.834},{"d":"2025-01-31","vix":15.3,"strict":15.271,"spot":856.4,"mode":"interpolated","vix3m":14.518,"strict3m":14.342},{"d":"2025-02-03","vix":16.017,"strict":15.965,"spot":849.54,"mode":"interpolated","vix3m":14.687,"strict3m":14.56},{"d":"2025-02-04","vix":15.725,"strict":15.708,"spot":848.47,"mode":"interpolated","vix3m":14.513,"strict3m":14.378},{"d":"2025-02-05","vix":16.325,"strict":16.241,"spot":838.08,"mode":"interpolated","vix3m":14.806,"strict3m":14.609},{"d":"2025-02-06","vix":18.651,"strict":18.224,"spot":822.1,"mode":"interpolated","vix3m":15.88,"strict3m":15.439},{"d":"2025-02-07","vix":17.942,"strict":17.856,"spot":838.22,"mode":"interpolated","vix3m":16.472,"strict3m":16.284},{"d":"2025-02-10","vix":18.974,"strict":18.797,"spot":829.87,"mode":"interpolated","vix3m":16.776,"strict3m":16.503},{"d":"2025-02-11","vix":18.046,"strict":17.968,"spot":837.12,"mode":"interpolated","vix3m":16.388,"strict3m":16.181},{"d":"2025-02-13","vix":18.059,"strict":18.002,"spot":839.29,"mode":"interpolated","vix3m":16.064,"strict3m":15.889},{"d":"2025-02-14","vix":18.687,"strict":18.606,"spot":828.87,"mode":"interpolated","vix3m":16.633,"strict3m":16.443},{"d":"2025-02-17","vix":20.671,"strict":20.432,"spot":810.82,"mode":"interpolated","vix3m":17.488,"strict3m":17.013},{"d":"2025-02-18","vix":20.067,"strict":19.99,"spot":808.2,"mode":"interpolated","vix3m":17.175,"strict3m":16.938},{"d":"2025-02-19","vix":19.465,"strict":19.411,"spot":808.57,"mode":"interpolated","vix3m":16.814,"strict3m":16.612},{"d":"2025-02-20","vix":19.882,"strict":19.447,"spot":795.06,"mode":"interpolated","vix3m":17.147,"strict3m":16.821},{"d":"2025-02-21","vix":19.727,"strict":19.385,"spot":795.09,"mode":"interpolated","vix3m":16.905,"strict3m":16.597},{"d":"2025-02-24","vix":20.324,"strict":20.197,"spot":787.51,"mode":"interpolated","vix3m":16.816,"strict3m":16.411},{"d":"2025-02-25","vix":22.271,"strict":21.856,"spot":768.55,"mode":"extrapolated","vix3m":18.235,"strict3m":17.36},{"d":"2025-02-26","vix":21.728,"strict":21.608,"spot":785.03,"mode":"interpolated","vix3m":18.617,"strict3m":18.241},{"d":"2025-02-27","vix":22.657,"strict":22.504,"spot":775.42,"mode":"interpolated","vix3m":18.998,"strict3m":18.626},{"d":"2025-02-28","vix":24.648,"strict":24.285,"spot":766.7,"mode":"interpolated","vix3m":19.236,"strict3m":18.775},{"d":"2025-03-03","vix":24.477,"strict":24.164,"spot":755.38,"mode":"interpolated","vix3m":19.532,"strict3m":18.932},{"d":"2025-03-04","vix":24.705,"strict":24.556,"spot":746.01,"mode":"interpolated","vix3m":19.706,"strict3m":19.282},{"d":"2025-03-05","vix":23.472,"strict":23.421,"spot":766.78,"mode":"interpolated","vix3m":20.458,"strict3m":20.044},{"d":"2025-03-06","vix":24.282,"strict":24.206,"spot":754.01,"mode":"interpolated","vix3m":20.757,"strict3m":20.289},{"d":"2025-03-07","vix":22.771,"strict":22.744,"spot":763.23,"mode":"interpolated","vix3m":20.174,"strict3m":19.835},{"d":"2025-03-10","vix":23.589,"strict":23.537,"spot":745.12,"mode":"interpolated","vix3m":21.459,"strict3m":20.784},{"d":"2025-03-11","vix":23.004,"strict":22.973,"spot":751.89,"mode":"interpolated","vix3m":21.193,"strict3m":20.605},{"d":"2025-03-12","vix":24.373,"strict":24.25,"spot":733.03,"mode":"interpolated","vix3m":22.054,"strict3m":21.259},{"d":"2025-03-13","vix":23.852,"strict":23.832,"spot":732.83,"mode":"interpolated","vix3m":21.502,"strict3m":21.209},{"d":"2025-03-14","vix":23.739,"strict":23.729,"spot":742.98,"mode":"interpolated","vix3m":22.266,"strict3m":21.883},{"d":"2025-03-17","vix":23.035,"strict":23.035,"spot":739.84,"mode":"interpolated","vix3m":22.15,"strict3m":21.771},{"d":"2025-03-18","vix":22.515,"strict":22.502,"spot":745.01,"mode":"interpolated","vix3m":21.204,"strict3m":20.961},{"d":"2025-03-19","vix":22.135,"strict":22.123,"spot":753.88,"mode":"interpolated","vix3m":21.157,"strict3m":20.894},{"d":"2025-03-20","vix":21.753,"strict":21.749,"spot":747.9,"mode":"interpolated","vix3m":21.179,"strict3m":20.923},{"d":"2025-03-21","vix":21.296,"strict":21.292,"spot":754.58,"mode":"interpolated","vix3m":20.615,"strict3m":20.426},{"d":"2025-03-24","vix":20.935,"strict":20.92,"spot":758.24,"mode":"interpolated","vix3m":20.843,"strict3m":20.676},{"d":"2025-03-25","vix":20.606,"strict":20.573,"spot":755.22,"mode":"interpolated","vix3m":20.761,"strict3m":20.578},{"d":"2025-03-26","vix":20.191,"strict":20.184,"spot":759.36,"mode":"extrapolated","vix3m":20.263,"strict3m":20.1},{"d":"2025-03-27","vix":19.828,"strict":19.826,"spot":759.1,"mode":"extrapolated","vix3m":20.153,"strict3m":19.989},{"d":"2025-03-28","vix":19.711,"strict":19.714,"spot":750.73,"mode":"extrapolated","vix3m":20.599,"strict3m":20.33},{"d":"2025-03-31","vix":19.923,"strict":19.909,"spot":739.77,"mode":"interpolated","vix3m":21.315,"strict3m":20.858},{"d":"2025-04-01","vix":19.846,"strict":19.839,"spot":747.6,"mode":"interpolated","vix3m":20.284,"strict3m":19.902},{"d":"2025-04-02","vix":19.528,"strict":19.519,"spot":751.43,"mode":"interpolated","vix3m":20.166,"strict3m":19.8},{"d":"2025-04-03","vix":19.634,"strict":19.642,"spot":741.67,"mode":"interpolated","vix3m":20.358,"strict3m":19.926},{"d":"2025-04-04","vix":22.428,"strict":22.38,"spot":715.17,"mode":"interpolated","vix3m":20.912,"strict3m":20.204},{"d":"2025-04-08","vix":26.222,"strict":25.811,"spot":683.69,"mode":"interpolated","vix3m":26.793,"strict3m":23.826},{"d":"2025-04-09","vix":26.348,"strict":26.324,"spot":696.06,"mode":"interpolated","vix3m":29.894,"strict3m":28.511},{"d":"2025-04-10","vix":29.847,"strict":29.782,"spot":729.82,"mode":"interpolated","vix3m":31.064,"strict3m":30.2},{"d":"2025-04-11","vix":29.235,"strict":29.171,"spot":727.04,"mode":"interpolated","vix3m":30.451,"strict3m":29.55},{"d":"2025-04-16","vix":28.76,"strict":28.717,"spot":730.31,"mode":"interpolated","vix3m":26.598,"strict3m":25.96},{"d":"2025-04-17","vix":28.161,"strict":28.101,"spot":729.31,"mode":"interpolated","vix3m":26.003,"strict3m":25.455},{"d":"2025-04-18","vix":27.76,"strict":27.712,"spot":735.7,"mode":"interpolated","vix3m":25.071,"strict3m":24.521},{"d":"2025-04-21","vix":27.687,"strict":27.66,"spot":724.16,"mode":"interpolated","vix3m":24.871,"strict3m":24.251},{"d":"2025-04-22","vix":27.244,"strict":27.228,"spot":730.2,"mode":"interpolated","vix3m":24.735,"strict3m":24.134},{"d":"2025-04-23","vix":26.945,"strict":26.91,"spot":738.54,"mode":"interpolated","vix3m":24.187,"strict3m":23.642},{"d":"2025-04-24","vix":26.525,"strict":26.502,"spot":732.52,"mode":"interpolated","vix3m":24.18,"strict3m":23.646},{"d":"2025-04-25","vix":26.483,"strict":26.32,"spot":741.52,"mode":"interpolated","vix3m":24.209,"strict3m":23.712},{"d":"2025-04-28","vix":25.942,"strict":25.937,"spot":743.23,"mode":"extrapolated","vix3m":24.096,"strict3m":23.546},{"d":"2025-04-29","vix":25.678,"strict":25.65,"spot":754.0,"mode":"interpolated","vix3m":25.247,"strict3m":24.115},{"d":"2025-04-30","vix":26.455,"strict":26.366,"spot":775.79,"mode":"interpolated","vix3m":26.2,"strict3m":24.665},{"d":"2025-05-02","vix":25.499,"strict":25.426,"spot":776.89,"mode":"interpolated","vix3m":25.565,"strict3m":24.645},{"d":"2025-05-06","vix":24.776,"strict":24.745,"spot":769.57,"mode":"interpolated","vix3m":25.071,"strict3m":24.288},{"d":"2025-05-07","vix":25.065,"strict":24.972,"spot":793.73,"mode":"interpolated","vix3m":26.052,"strict3m":24.892},{"d":"2025-05-08","vix":24.889,"strict":24.88,"spot":783.61,"mode":"interpolated","vix3m":25.869,"strict3m":25.211},{"d":"2025-05-09","vix":24.463,"strict":24.449,"spot":789.38,"mode":"interpolated","vix3m":25.793,"strict3m":25.025},{"d":"2025-05-13","vix":24.028,"strict":24.009,"spot":789.97,"mode":"interpolated","vix3m":24.896,"strict3m":24.35},{"d":"2025-05-14","vix":23.59,"strict":23.582,"spot":793.9,"mode":"interpolated","vix3m":24.512,"strict3m":24.022},{"d":"2025-05-15","vix":24.088,"strict":24.111,"spot":778.41,"mode":"interpolated","vix3m":24.65,"strict3m":24.203},{"d":"2025-05-16","vix":23.563,"strict":23.541,"spot":779.2,"mode":"interpolated","vix3m":24.386,"strict3m":23.966},{"d":"2025-05-19","vix":23.745,"strict":23.716,"spot":771.93,"mode":"interpolated","vix3m":24.394,"strict3m":23.997},{"d":"2025-05-20","vix":23.0,"strict":22.97,"spot":774.62,"mode":"interpolated","vix3m":24.098,"strict3m":23.727},{"d":"2025-05-21","vix":22.638,"strict":22.6,"spot":769.4,"mode":"interpolated","vix3m":23.733,"strict3m":23.352},{"d":"2025-05-22","vix":22.578,"strict":22.539,"spot":766.63,"mode":"interpolated","vix3m":23.868,"strict3m":23.484},{"d":"2025-05-23","vix":21.957,"strict":21.928,"spot":768.45,"mode":"interpolated","vix3m":23.137,"strict3m":22.837},{"d":"2025-05-26","vix":21.914,"strict":21.764,"spot":770.46,"mode":"interpolated","vix3m":22.99,"strict3m":22.707},{"d":"2025-05-27","vix":21.766,"strict":21.727,"spot":758.66,"mode":"extrapolated","vix3m":22.9,"strict3m":22.638},{"d":"2025-05-28","vix":22.048,"strict":22.002,"spot":756.0,"mode":"interpolated","vix3m":22.378,"strict3m":22.042},{"d":"2025-05-29","vix":20.629,"strict":20.579,"spot":758.11,"mode":"interpolated","vix3m":21.669,"strict3m":18.456},{"d":"2025-05-30","vix":22.175,"strict":22.116,"spot":746.02,"mode":"interpolated","vix3m":21.96,"strict3m":18.607},{"d":"2025-06-04","vix":22.696,"strict":22.614,"spot":734.36,"mode":"interpolated","vix3m":22.51,"strict3m":20.077},{"d":"2025-06-05","vix":21.98,"strict":21.952,"spot":741.35,"mode":"interpolated","vix3m":22.173,"strict3m":20.733},{"d":"2025-06-06","vix":21.297,"strict":21.231,"spot":737.62,"mode":"interpolated","vix3m":21.956,"strict3m":20.628},{"d":"2025-06-09","vix":20.851,"strict":20.783,"spot":736.15,"mode":"interpolated","vix3m":21.903,"strict3m":20.868},{"d":"2025-06-10","vix":20.033,"strict":19.985,"spot":739.49,"mode":"interpolated","vix3m":21.182,"strict3m":20.253},{"d":"2025-06-11","vix":19.705,"strict":19.678,"spot":742.31,"mode":"interpolated","vix3m":21.151,"strict3m":20.377},{"d":"2025-06-12","vix":20.16,"strict":20.113,"spot":733.14,"mode":"interpolated","vix3m":21.431,"strict3m":20.525},{"d":"2025-06-13","vix":19.951,"strict":19.904,"spot":730.27,"mode":"interpolated","vix3m":21.885,"strict3m":21.057},{"d":"2025-06-16","vix":19.645,"strict":19.582,"spot":725.71,"mode":"interpolated","vix3m":22.143,"strict3m":21.368},{"d":"2025-06-17","vix":19.283,"strict":19.245,"spot":724.09,"mode":"interpolated","vix3m":21.869,"strict3m":21.156},{"d":"2025-06-18","vix":20.31,"strict":20.137,"spot":710.29,"mode":"interpolated","vix3m":22.638,"strict3m":21.811},{"d":"2025-06-19","vix":22.041,"strict":21.303,"spot":692.83,"mode":"interpolated","vix3m":25.479,"strict3m":24.29},{"d":"2025-06-20","vix":21.226,"strict":20.824,"spot":693.21,"mode":"interpolated","vix3m":25.141,"strict3m":24.19},{"d":"2025-06-23","vix":20.36,"strict":19.991,"spot":692.53,"mode":"interpolated","vix3m":26.232,"strict3m":25.345},{"d":"2025-06-24","vix":23.411,"strict":23.243,"spot":720.17,"mode":"interpolated","vix3m":27.424,"strict3m":26.736},{"d":"2025-06-25","vix":22.882,"strict":23.039,"spot":725.35,"mode":"extrapolated","vix3m":26.917,"strict3m":26.228},{"d":"2025-06-26","vix":22.441,"strict":22.468,"spot":722.33,"mode":"extrapolated","vix3m":26.634,"strict3m":25.979},{"d":"2025-06-27","vix":23.467,"strict":23.282,"spot":703.75,"mode":"extrapolated","vix3m":27.72,"strict3m":26.887},{"d":"2025-06-30","vix":23.084,"strict":22.879,"spot":708.6,"mode":"interpolated","vix3m":27.269,"strict3m":26.45},{"d":"2025-07-01","vix":23.583,"strict":23.432,"spot":723.73,"mode":"interpolated","vix3m":26.715,"strict3m":25.992},{"d":"2025-07-02","vix":23.178,"strict":23.02,"spot":726.38,"mode":"interpolated","vix3m":26.137,"strict3m":25.386},{"d":"2025-07-03","vix":22.796,"strict":22.619,"spot":732.19,"mode":"interpolated","vix3m":24.958,"strict3m":24.268},{"d":"2025-07-04","vix":22.567,"strict":22.378,"spot":726.16,"mode":"interpolated","vix3m":24.936,"strict3m":24.167},{"d":"2025-07-07","vix":22.095,"strict":21.858,"spot":729.21,"mode":"interpolated","vix3m":24.804,"strict3m":23.777},{"d":"2025-07-08","vix":21.771,"strict":21.544,"spot":724.09,"mode":"interpolated","vix3m":24.043,"strict3m":23.049},{"d":"2025-07-09","vix":21.374,"strict":21.146,"spot":720.98,"mode":"interpolated","vix3m":23.134,"strict3m":22.26},{"d":"2025-07-11","vix":21.163,"strict":20.938,"spot":728.07,"mode":"interpolated","vix3m":22.493,"strict3m":21.446},{"d":"2025-07-14","vix":21.823,"strict":21.449,"spot":744.01,"mode":"interpolated","vix3m":22.206,"strict3m":20.974},{"d":"2025-07-15","vix":21.926,"strict":21.357,"spot":755.26,"mode":"interpolated","vix3m":22.133,"strict3m":20.989},{"d":"2025-07-16","vix":21.497,"strict":21.007,"spot":753.26,"mode":"interpolated","vix3m":21.832,"strict3m":20.919},{"d":"2025-07-17","vix":24.353,"strict":22.345,"spot":782.85,"mode":"interpolated","vix3m":22.636,"strict3m":21.502},{"d":"2025-07-18","vix":23.951,"strict":22.619,"spot":789.42,"mode":"interpolated","vix3m":22.98,"strict3m":21.931},{"d":"2025-07-21","vix":23.451,"strict":22.514,"spot":789.99,"mode":"interpolated","vix3m":23.212,"strict3m":22.212},{"d":"2025-07-22","vix":23.444,"strict":22.824,"spot":779.28,"mode":"interpolated","vix3m":22.666,"strict3m":21.819},{"d":"2025-07-23","vix":24.184,"strict":22.82,"spot":798.47,"mode":"interpolated","vix3m":22.674,"strict3m":21.497},{"d":"2025-07-24","vix":23.782,"strict":23.014,"spot":794.0,"mode":"interpolated","vix3m":23.091,"strict3m":22.108},{"d":"2025-07-25","vix":23.364,"strict":22.52,"spot":798.05,"mode":"interpolated","vix3m":23.325,"strict3m":22.275},{"d":"2025-07-29","vix":23.388,"strict":22.138,"spot":810.12,"mode":"interpolated","vix3m":22.636,"strict3m":21.214},{"d":"2025-07-30","vix":23.037,"strict":22.125,"spot":815.4,"mode":"interpolated","vix3m":22.905,"strict3m":18.516},{"d":"2025-07-31","vix":22.563,"strict":22.063,"spot":814.78,"mode":"interpolated","vix3m":22.381,"strict3m":18.724},{"d":"2025-08-01","vix":23.098,"strict":22.88,"spot":796.43,"mode":"interpolated","vix3m":22.972,"strict3m":18.766},{"d":"2025-08-04","vix":22.405,"strict":22.165,"spot":806.38,"mode":"interpolated","vix3m":22.665,"strict3m":19.552},{"d":"2025-08-05","vix":21.88,"strict":21.565,"spot":815.58,"mode":"interpolated","vix3m":22.387,"strict3m":19.461},{"d":"2025-08-06","vix":21.386,"strict":20.98,"spot":823.56,"mode":"interpolated","vix3m":22.066,"strict3m":19.17},{"d":"2025-08-07","vix":21.284,"strict":20.909,"spot":825.09,"mode":"interpolated","vix3m":21.68,"strict3m":18.915},{"d":"2025-08-08","vix":21.499,"strict":21.337,"spot":818.09,"mode":"interpolated","vix3m":21.576,"strict3m":19.335},{"d":"2025-08-13","vix":20.788,"strict":20.496,"spot":830.05,"mode":"interpolated","vix3m":21.368,"strict3m":19.246},{"d":"2025-08-14","vix":20.568,"strict":20.469,"spot":820.42,"mode":"interpolated","vix3m":21.34,"strict3m":19.41},{"d":"2025-08-15","vix":20.609,"strict":20.521,"spot":817.19,"mode":"interpolated","vix3m":21.049,"strict3m":19.223},{"d":"2025-08-18","vix":20.811,"strict":20.715,"spot":808.21,"mode":"interpolated","vix3m":21.185,"strict3m":19.202},{"d":"2025-08-19","vix":21.156,"strict":21.063,"spot":803.55,"mode":"interpolated","vix3m":20.577,"strict3m":18.947},{"d":"2025-08-20","vix":20.812,"strict":20.623,"spot":814.25,"mode":"interpolated","vix3m":20.5,"strict3m":18.929},{"d":"2025-08-21","vix":20.621,"strict":20.533,"spot":814.77,"mode":"interpolated","vix3m":20.226,"strict3m":18.798},{"d":"2025-08-22","vix":20.44,"strict":20.291,"spot":819.27,"mode":"interpolated","vix3m":19.847,"strict3m":18.491},{"d":"2025-08-25","vix":20.777,"strict":20.677,"spot":825.58,"mode":"interpolated","vix3m":19.475,"strict3m":18.228},{"d":"2025-08-26","vix":21.453,"strict":21.457,"spot":818.54,"mode":"extrapolated","vix3m":19.751,"strict3m":18.527},{"d":"2025-08-27","vix":21.228,"strict":21.174,"spot":817.01,"mode":"extrapolated","vix3m":19.382,"strict3m":18.251},{"d":"2025-08-28","vix":20.76,"strict":20.69,"spot":817.39,"mode":"extrapolated","vix3m":18.971,"strict3m":16.299},{"d":"2025-08-29","vix":21.457,"strict":21.424,"spot":808.02,"mode":"extrapolated","vix3m":18.975,"strict3m":16.258},{"d":"2025-09-01","vix":20.881,"strict":20.722,"spot":813.99,"mode":"interpolated","vix3m":18.86,"strict3m":16.949},{"d":"2025-09-02","vix":20.134,"strict":19.951,"spot":816.85,"mode":"interpolated","vix3m":18.626,"strict3m":16.922},{"d":"2025-09-03","vix":19.788,"strict":19.535,"spot":823.37,"mode":"interpolated","vix3m":18.299,"strict3m":16.642},{"d":"2025-09-04","vix":19.499,"strict":19.248,"spot":815.65,"mode":"interpolated","vix3m":18.478,"strict3m":16.951},{"d":"2025-09-05","vix":19.087,"strict":18.766,"spot":822.56,"mode":"interpolated","vix3m":18.301,"strict3m":16.812},{"d":"2025-09-08","vix":19.138,"strict":18.826,"spot":820.43,"mode":"interpolated","vix3m":18.305,"strict3m":17.001},{"d":"2025-09-09","vix":18.809,"strict":18.466,"spot":826.5,"mode":"interpolated","vix3m":18.134,"strict3m":16.945},{"d":"2025-09-10","vix":18.327,"strict":17.993,"spot":826.21,"mode":"interpolated","vix3m":17.708,"strict3m":16.6},{"d":"2025-09-11","vix":17.795,"strict":17.435,"spot":833.87,"mode":"interpolated","vix3m":18.244,"strict3m":17.074},{"d":"2025-09-12","vix":16.932,"strict":16.463,"spot":836.87,"mode":"interpolated","vix3m":17.894,"strict3m":16.792},{"d":"2025-09-15","vix":16.77,"strict":16.429,"spot":840.09,"mode":"interpolated","vix3m":17.818,"strict3m":16.889},{"d":"2025-09-16","vix":16.377,"strict":15.968,"spot":844.57,"mode":"interpolated","vix3m":17.952,"strict3m":16.917},{"d":"2025-09-17","vix":16.44,"strict":16.11,"spot":843.94,"mode":"interpolated","vix3m":17.849,"strict3m":16.886},{"d":"2025-09-18","vix":16.445,"strict":16.111,"spot":838.74,"mode":"interpolated","vix3m":17.774,"strict3m":16.921},{"d":"2025-09-19","vix":16.117,"strict":15.843,"spot":834.86,"mode":"interpolated","vix3m":17.862,"strict3m":17.083},{"d":"2025-09-22","vix":16.458,"strict":16.335,"spot":829.34,"mode":"interpolated","vix3m":18.185,"strict3m":17.525},{"d":"2025-09-23","vix":15.782,"strict":15.684,"spot":824.3,"mode":"interpolated","vix3m":18.762,"strict3m":18.047},{"d":"2025-09-24","vix":16.292,"strict":16.22,"spot":825.68,"mode":"interpolated","vix3m":18.758,"strict3m":18.1},{"d":"2025-09-25","vix":16.492,"strict":16.384,"spot":832.92,"mode":"interpolated","vix3m":18.316,"strict3m":17.667},{"d":"2025-09-26","vix":16.186,"strict":16.133,"spot":825.62,"mode":"interpolated","vix3m":18.484,"strict3m":17.832},{"d":"2025-09-29","vix":17.152,"strict":16.623,"spot":834.29,"mode":"extrapolated","vix3m":18.524,"strict3m":17.773},{"d":"2025-09-30","vix":17.333,"strict":17.08,"spot":825.42,"mode":"interpolated","vix3m":18.652,"strict3m":17.904},{"d":"2025-10-01","vix":16.849,"strict":16.593,"spot":824.34,"mode":"interpolated","vix3m":18.295,"strict3m":17.513},{"d":"2025-10-02","vix":16.165,"strict":15.998,"spot":832.17,"mode":"interpolated","vix3m":17.878,"strict3m":17.041},{"d":"2025-10-03","vix":15.475,"strict":15.339,"spot":836.26,"mode":"interpolated","vix3m":17.269,"strict3m":16.531},{"d":"2025-10-06","vix":15.676,"strict":15.528,"spot":829.88,"mode":"interpolated","vix3m":17.421,"strict3m":16.529},{"d":"2025-10-07","vix":15.196,"strict":14.985,"spot":841.82,"mode":"interpolated","vix3m":16.63,"strict3m":15.821},{"d":"2025-10-08","vix":14.988,"strict":14.799,"spot":841.6,"mode":"interpolated","vix3m":16.615,"strict3m":15.667},{"d":"2025-10-09","vix":14.598,"strict":14.284,"spot":850.0,"mode":"interpolated","vix3m":16.241,"strict3m":15.145},{"d":"2025-10-10","vix":14.962,"strict":14.764,"spot":834.49,"mode":"interpolated","vix3m":16.481,"strict3m":15.669},{"d":"2025-10-14","vix":17.024,"strict":16.488,"spot":821.14,"mode":"interpolated","vix3m":17.591,"strict3m":16.527},{"d":"2025-10-15","vix":16.567,"strict":16.249,"spot":834.58,"mode":"interpolated","vix3m":17.001,"strict3m":16.0},{"d":"2025-10-16","vix":16.099,"strict":15.903,"spot":836.77,"mode":"interpolated","vix3m":16.489,"strict3m":15.632},{"d":"2025-10-17","vix":16.28,"strict":16.097,"spot":826.83,"mode":"interpolated","vix3m":17.134,"strict3m":15.99},{"d":"2025-10-20","vix":16.197,"strict":16.03,"spot":835.45,"mode":"interpolated","vix3m":16.341,"strict3m":15.417},{"d":"2025-10-21","vix":15.984,"strict":15.7,"spot":839.05,"mode":"interpolated","vix3m":16.188,"strict3m":15.13},{"d":"2025-10-22","vix":15.368,"strict":15.122,"spot":848.34,"mode":"interpolated","vix3m":15.661,"strict3m":14.681},{"d":"2025-10-24","vix":15.149,"strict":14.855,"spot":858.28,"mode":"interpolated","vix3m":14.882,"strict3m":13.845},{"d":"2025-10-27","vix":15.43,"strict":15.219,"spot":861.68,"mode":"interpolated","vix3m":15.095,"strict3m":14.088},{"d":"2025-10-28","vix":15.832,"strict":15.683,"spot":854.48,"mode":"interpolated","vix3m":15.065,"strict3m":14.196},{"d":"2025-10-29","vix":15.867,"strict":15.717,"spot":855.68,"mode":"interpolated","vix3m":15.483,"strict3m":14.268},{"d":"2025-10-30","vix":15.835,"strict":15.69,"spot":855.87,"mode":"interpolated","vix3m":14.896,"strict3m":13.254},{"d":"2025-10-31","vix":15.918,"strict":15.709,"spot":851.93,"mode":"interpolated","vix3m":14.555,"strict3m":12.989},{"d":"2025-11-03","vix":16.096,"strict":15.981,"spot":851.22,"mode":"interpolated","vix3m":14.817,"strict3m":13.252},{"d":"2025-11-04","vix":16.563,"strict":16.322,"spot":844.31,"mode":"interpolated","vix3m":15.066,"strict3m":13.35},{"d":"2025-11-05","vix":16.431,"strict":16.255,"spot":842.93,"mode":"interpolated","vix3m":14.818,"strict3m":13.565},{"d":"2025-11-06","vix":15.783,"strict":15.633,"spot":853.59,"mode":"interpolated","vix3m":14.578,"strict3m":13.638},{"d":"2025-11-07","vix":15.834,"strict":15.622,"spot":847.55,"mode":"interpolated","vix3m":14.185,"strict3m":13.343},{"d":"2025-11-10","vix":15.845,"strict":15.717,"spot":850.53,"mode":"interpolated","vix3m":14.717,"strict3m":13.411},{"d":"2025-11-11","vix":15.6,"strict":15.481,"spot":847.15,"mode":"interpolated","vix3m":14.11,"strict3m":13.196},{"d":"2025-11-12","vix":16.09,"strict":15.976,"spot":837.7,"mode":"interpolated","vix3m":15.026,"strict3m":13.558},{"d":"2025-11-13","vix":15.867,"strict":15.715,"spot":840.27,"mode":"interpolated","vix3m":14.731,"strict3m":13.353},{"d":"2025-11-14","vix":17.89,"strict":17.731,"spot":828.73,"mode":"interpolated","vix3m":15.891,"strict3m":13.993},{"d":"2025-11-17","vix":17.683,"strict":17.543,"spot":837.34,"mode":"interpolated","vix3m":15.135,"strict3m":13.99},{"d":"2025-11-18","vix":17.917,"strict":17.729,"spot":830.71,"mode":"interpolated","vix3m":15.575,"strict3m":14.315},{"d":"2025-11-19","vix":17.839,"strict":17.783,"spot":829.29,"mode":"interpolated","vix3m":16.275,"strict3m":14.432},{"d":"2025-11-20","vix":17.227,"strict":17.098,"spot":836.46,"mode":"interpolated","vix3m":15.744,"strict3m":14.374},{"d":"2025-11-21","vix":19.179,"strict":19.037,"spot":819.1,"mode":"interpolated","vix3m":15.942,"strict3m":14.271},{"d":"2025-11-24","vix":19.241,"strict":19.175,"spot":818.98,"mode":"interpolated","vix3m":16.127,"strict3m":14.361},{"d":"2025-11-25","vix":18.885,"strict":18.955,"spot":829.67,"mode":"extrapolated","vix3m":16.459,"strict3m":14.708},{"d":"2025-11-26","vix":18.325,"strict":18.37,"spot":825.79,"mode":"extrapolated","vix3m":16.405,"strict3m":14.693},{"d":"2025-11-27","vix":18.648,"strict":18.422,"spot":820.47,"mode":"extrapolated","vix3m":13.87,"strict3m":12.525},{"d":"2025-11-28","vix":18.464,"strict":18.517,"spot":822.78,"mode":"extrapolated","vix3m":16.021,"strict3m":14.049},{"d":"2025-12-01","vix":17.811,"strict":17.657,"spot":836.89,"mode":"interpolated","vix3m":16.585,"strict3m":14.583},{"d":"2025-12-02","vix":17.037,"strict":16.941,"spot":837.85,"mode":"interpolated","vix3m":14.948,"strict3m":13.859},{"d":"2025-12-03","vix":16.261,"strict":16.192,"spot":836.36,"mode":"interpolated","vix3m":15.703,"strict3m":14.37},{"d":"2025-12-04","vix":15.752,"strict":15.475,"spot":837.85,"mode":"interpolated","vix3m":15.608,"strict3m":14.071},{"d":"2025-12-08","vix":16.114,"strict":15.737,"spot":832.04,"mode":"interpolated","vix3m":16.651,"strict3m":14.597},{"d":"2025-12-09","vix":15.344,"strict":15.269,"spot":837.65,"mode":"interpolated","vix3m":15.219,"strict3m":14.15},{"d":"2025-12-11","vix":16.199,"strict":15.552,"spot":828.42,"mode":"interpolated","vix3m":16.035,"strict3m":14.373},{"d":"2025-12-12","vix":14.776,"strict":14.676,"spot":827.81,"mode":"interpolated","vix3m":15.323,"strict3m":14.064},{"d":"2025-12-15","vix":14.792,"strict":14.718,"spot":841.16,"mode":"interpolated","vix3m":15.536,"strict3m":14.287},{"d":"2025-12-16","vix":14.522,"strict":14.453,"spot":832.84,"mode":"interpolated","vix3m":15.328,"strict3m":14.115},{"d":"2025-12-17","vix":15.273,"strict":14.876,"spot":830.3,"mode":"interpolated","vix3m":15.269,"strict3m":13.936},{"d":"2025-12-18","vix":15.289,"strict":14.887,"spot":828.64,"mode":"interpolated","vix3m":15.174,"strict3m":13.954},{"d":"2025-12-19","vix":13.718,"strict":13.646,"spot":828.5,"mode":"interpolated","vix3m":14.946,"strict3m":13.672},{"d":"2025-12-22","vix":14.403,"strict":14.225,"spot":839.24,"mode":"interpolated","vix3m":14.965,"strict3m":13.919},{"d":"2025-12-23","vix":13.717,"strict":13.687,"spot":842.09,"mode":"interpolated","vix3m":14.772,"strict3m":13.904},{"d":"2025-12-24","vix":13.609,"strict":13.448,"spot":844.85,"mode":"interpolated","vix3m":14.671,"strict3m":13.802},{"d":"2025-12-25","vix":13.803,"strict":13.559,"spot":838.9,"mode":"interpolated","vix3m":14.594,"strict3m":13.632},{"d":"2025-12-26","vix":13.441,"strict":13.413,"spot":835.55,"mode":"interpolated","vix3m":14.697,"strict3m":13.697},{"d":"2025-12-29","vix":14.84,"strict":14.477,"spot":831.44,"mode":"extrapolated","vix3m":14.892,"strict3m":13.708},{"d":"2025-12-30","vix":13.58,"strict":13.463,"spot":835.67,"mode":"interpolated","vix3m":14.746,"strict3m":13.643},{"d":"2026-01-05","vix":14.221,"strict":14.047,"spot":848.13,"mode":"interpolated","vix3m":14.639,"strict3m":13.653},{"d":"2026-01-06","vix":14.195,"strict":13.999,"spot":843.54,"mode":"interpolated","vix3m":14.751,"strict3m":13.67},{"d":"2026-01-07","vix":13.525,"strict":13.235,"spot":845.83,"mode":"interpolated","vix3m":14.399,"strict3m":13.367},{"d":"2026-01-08","vix":14.841,"strict":14.523,"spot":833.08,"mode":"interpolated","vix3m":14.952,"strict3m":13.672},{"d":"2026-01-09","vix":14.491,"strict":14.197,"spot":833.35,"mode":"interpolated","vix3m":14.87,"strict3m":13.619},{"d":"2026-01-12","vix":15.411,"strict":15.037,"spot":828.04,"mode":"interpolated","vix3m":15.152,"strict3m":13.726},{"d":"2026-01-13","vix":14.87,"strict":14.765,"spot":825.38,"mode":"interpolated","vix3m":15.0,"strict3m":13.463},{"d":"2026-01-14","vix":14.812,"strict":14.412,"spot":833.83,"mode":"interpolated","vix3m":14.946,"strict3m":13.63},{"d":"2026-01-15","vix":14.032,"strict":13.863,"spot":844.3,"mode":"interpolated","vix3m":14.665,"strict3m":13.538},{"d":"2026-01-16","vix":13.967,"strict":13.732,"spot":855.83,"mode":"interpolated","vix3m":14.518,"strict3m":13.525},{"d":"2026-01-19","vix":14.269,"strict":14.051,"spot":859.77,"mode":"interpolated","vix3m":14.543,"strict3m":13.532},{"d":"2026-01-20","vix":14.49,"strict":14.204,"spot":869.4,"mode":"interpolated","vix3m":14.639,"strict3m":13.572},{"d":"2026-01-21","vix":15.156,"strict":14.641,"spot":881.31,"mode":"interpolated","vix3m":15.076,"strict3m":13.939},{"d":"2026-01-22","vix":15.408,"strict":15.165,"spot":874.91,"mode":"interpolated","vix3m":15.343,"strict3m":14.312},{"d":"2026-01-23","vix":14.774,"strict":14.734,"spot":876.69,"mode":"interpolated","vix3m":15.108,"strict3m":14.098},{"d":"2026-01-26","vix":13.342,"strict":12.926,"spot":872.84,"mode":"interpolated","vix3m":15.397,"strict3m":14.318},{"d":"2026-01-27","vix":13.576,"strict":12.857,"spot":888.92,"mode":"interpolated","vix3m":15.55,"strict3m":14.348},{"d":"2026-01-28","vix":16.061,"strict":15.603,"spot":893.6,"mode":"interpolated","vix3m":15.111,"strict3m":14.05},{"d":"2026-01-29","vix":16.507,"strict":16.073,"spot":887.59,"mode":"interpolated","vix3m":11.905,"strict3m":11.076},{"d":"2026-01-30","vix":16.638,"strict":16.348,"spot":882.67,"mode":"interpolated","vix3m":11.955,"strict3m":11.093},{"d":"2026-02-02","vix":17.201,"strict":16.896,"spot":882.44,"mode":"interpolated","vix3m":14.151,"strict3m":12.305},{"d":"2026-02-03","vix":16.756,"strict":16.536,"spot":891.95,"mode":"interpolated","vix3m":14.634,"strict3m":13.298},{"d":"2026-02-04","vix":16.622,"strict":16.164,"spot":903.22,"mode":"interpolated","vix3m":13.381,"strict3m":12.577},{"d":"2026-02-05","vix":16.576,"strict":16.262,"spot":904.12,"mode":"interpolated","vix3m":12.6,"strict3m":11.924},{"d":"2026-02-06","vix":17.288,"strict":16.779,"spot":909.38,"mode":"interpolated","vix3m":13.82,"strict3m":12.988},{"d":"2026-02-09","vix":18.037,"strict":16.292,"spot":942.61,"mode":"interpolated","vix3m":14.98,"strict3m":13.228},{"d":"2026-02-10","vix":18.198,"strict":17.581,"spot":950.34,"mode":"interpolated","vix3m":13.993,"strict3m":13.163},{"d":"2026-02-11","vix":18.045,"strict":17.668,"spot":949.89,"mode":"interpolated","vix3m":14.337,"strict3m":13.737},{"d":"2026-02-12","vix":18.955,"strict":17.618,"spot":971.77,"mode":"interpolated","vix3m":16.484,"strict3m":14.319},{"d":"2026-02-13","vix":20.285,"strict":19.722,"spot":964.35,"mode":"interpolated","vix3m":15.756,"strict3m":14.863},{"d":"2026-02-16","vix":19.231,"strict":18.68,"spot":968.61,"mode":"interpolated","vix3m":15.769,"strict3m":15.022},{"d":"2026-02-17","vix":18.153,"strict":17.389,"spot":982.93,"mode":"interpolated","vix3m":14.737,"strict3m":13.698},{"d":"2026-02-18","vix":17.981,"strict":17.432,"spot":986.32,"mode":"interpolated","vix3m":15.089,"strict3m":14.081},{"d":"2026-02-19","vix":18.154,"strict":17.432,"spot":1003.57,"mode":"interpolated","vix3m":15.763,"strict3m":14.656},{"d":"2026-02-20","vix":18.353,"strict":17.912,"spot":995.15,"mode":"interpolated","vix3m":15.919,"strict3m":15.053},{"d":"2026-02-23","vix":19.047,"strict":18.603,"spot":992.79,"mode":"interpolated","vix3m":16.222,"strict3m":15.358},{"d":"2026-02-24","vix":19.729,"strict":19.084,"spot":1000.2,"mode":"extrapolated","vix3m":16.526,"strict3m":15.667},{"d":"2026-02-25","vix":19.612,"strict":18.687,"spot":1016.19,"mode":"extrapolated","vix3m":16.628,"strict3m":15.226},{"d":"2026-02-26","vix":19.323,"strict":18.716,"spot":1026.01,"mode":"extrapolated","vix3m":13.585,"strict3m":12.077},{"d":"2026-02-27","vix":19.49,"strict":19.135,"spot":1019.53,"mode":"extrapolated","vix3m":15.094,"strict3m":13.355},{"d":"2026-03-02","vix":21.297,"strict":21.198,"spot":978.8,"mode":"interpolated","vix3m":16.43,"strict3m":13.157},{"d":"2026-03-04","vix":33.711,"strict":32.817,"spot":925.51,"mode":"interpolated","vix3m":18.706,"strict3m":15.72},{"d":"2026-03-05","vix":27.608,"strict":27.344,"spot":943.6,"mode":"interpolated","vix3m":20.028,"strict3m":18.876},{"d":"2026-03-06","vix":29.821,"strict":28.953,"spot":937.7,"mode":"interpolated","vix3m":21.909,"strict3m":20.536},{"d":"2026-03-09","vix":31.384,"strict":30.397,"spot":918.38,"mode":"interpolated","vix3m":22.917,"strict3m":20.425},{"d":"2026-03-10","vix":30.783,"strict":29.611,"spot":932.77,"mode":"interpolated","vix3m":22.994,"strict3m":21.319},{"d":"2026-03-11","vix":29.082,"strict":28.429,"spot":933.08,"mode":"interpolated","vix3m":23.46,"strict3m":21.508},{"d":"2026-03-12","vix":28.089,"strict":27.891,"spot":950.12,"mode":"interpolated","vix3m":24.207,"strict3m":22.694},{"d":"2026-03-13","vix":26.546,"strict":26.367,"spot":936.5,"mode":"interpolated","vix3m":22.803,"strict3m":20.941},{"d":"2026-03-16","vix":25.693,"strict":25.579,"spot":933.25,"mode":"interpolated","vix3m":24.96,"strict3m":23.235},{"d":"2026-03-17","vix":23.182,"strict":23.132,"spot":953.66,"mode":"interpolated","vix3m":24.556,"strict3m":23.289},{"d":"2026-03-18","vix":23.491,"strict":21.722,"spot":955.82,"mode":"interpolated","vix3m":23.181,"strict3m":22.029},{"d":"2026-03-19","vix":22.682,"strict":22.651,"spot":942.83,"mode":"interpolated","vix3m":23.902,"strict3m":22.659},{"d":"2026-03-20","vix":22.018,"strict":21.988,"spot":953.13,"mode":"interpolated","vix3m":22.848,"strict3m":21.76},{"d":"2026-03-23","vix":23.014,"strict":22.967,"spot":929.55,"mode":"interpolated","vix3m":24.78,"strict3m":23.649},{"d":"2026-03-24","vix":23.099,"strict":22.099,"spot":939.4,"mode":"interpolated","vix3m":23.973,"strict3m":22.857},{"d":"2026-03-25","vix":21.96,"strict":21.49,"spot":968.01,"mode":"interpolated","vix3m":23.646,"strict3m":22.695},{"d":"2026-03-26","vix":22.837,"strict":21.739,"spot":961.21,"mode":"interpolated","vix3m":24.156,"strict3m":23.042},{"d":"2026-03-27","vix":22.415,"strict":21.678,"spot":963.88,"mode":"interpolated","vix3m":24.38,"strict3m":23.435},{"d":"2026-03-30","vix":23.015,"strict":22.895,"spot":967.72,"mode":"interpolated","vix3m":24.456,"strict3m":23.37},{"d":"2026-03-31","vix":22.497,"strict":22.307,"spot":969.15,"mode":"interpolated","vix3m":24.118,"strict3m":22.883},{"d":"2026-04-01","vix":21.61,"strict":21.51,"spot":979.9,"mode":"interpolated","vix3m":23.772,"strict3m":22.483},{"d":"2026-04-02","vix":20.986,"strict":20.914,"spot":976.34,"mode":"interpolated","vix3m":23.603,"strict3m":22.249},{"d":"2026-04-03","vix":22.046,"strict":21.578,"spot":968.16,"mode":"interpolated","vix3m":23.737,"strict3m":22.535},{"d":"2026-04-07","vix":21.917,"strict":20.777,"spot":974.78,"mode":"interpolated","vix3m":23.949,"strict3m":22.001},{"d":"2026-04-08","vix":21.178,"strict":20.865,"spot":986.54,"mode":"interpolated","vix3m":23.431,"strict3m":21.466},{"d":"2026-04-09","vix":20.227,"strict":20.032,"spot":985.6,"mode":"interpolated","vix3m":22.905,"strict3m":21.595},{"d":"2026-04-10","vix":20.064,"strict":19.71,"spot":989.57,"mode":"interpolated","vix3m":22.468,"strict3m":21.088},{"d":"2026-04-16","vix":21.01,"strict":20.833,"spot":982.71,"mode":"interpolated","vix3m":22.986,"strict3m":20.839},{"d":"2026-04-17","vix":21.85,"strict":20.798,"spot":974.4,"mode":"interpolated","vix3m":23.24,"strict3m":20.978},{"d":"2026-04-20","vix":19.105,"strict":18.981,"spot":970.86,"mode":"interpolated","vix3m":22.008,"strict3m":20.431},{"d":"2026-04-21","vix":20.846,"strict":20.777,"spot":971.35,"mode":"interpolated","vix3m":22.697,"strict3m":20.214},{"d":"2026-04-22","vix":19.419,"strict":19.346,"spot":969.82,"mode":"interpolated","vix3m":21.574,"strict3m":20.071},{"d":"2026-04-23","vix":21.315,"strict":20.601,"spot":959.49,"mode":"interpolated","vix3m":23.05,"strict3m":19.852},{"d":"2026-04-24","vix":20.572,"strict":20.433,"spot":955.89,"mode":"interpolated","vix3m":22.74,"strict3m":19.664},{"d":"2026-04-27","vix":18.564,"strict":18.575,"spot":965.74,"mode":"extrapolated","vix3m":22.535,"strict3m":19.728},{"d":"2026-04-28","vix":21.092,"strict":20.651,"spot":966.34,"mode":"interpolated","vix3m":22.333,"strict3m":19.342},{"d":"2026-04-29","vix":20.446,"strict":20.393,"spot":973.06,"mode":"interpolated","vix3m":16.945,"strict3m":14.094},{"d":"2026-04-30","vix":22.358,"strict":21.798,"spot":971.8,"mode":"interpolated","vix3m":19.254,"strict3m":14.729},{"d":"2026-05-05","vix":23.369,"strict":23.008,"spot":971.91,"mode":"interpolated","vix3m":17.81,"strict3m":14.77},{"d":"2026-05-06","vix":22.882,"strict":22.411,"spot":987.36,"mode":"interpolated","vix3m":17.973,"strict3m":14.651},{"d":"2026-05-07","vix":22.948,"strict":22.618,"spot":984.27,"mode":"interpolated","vix3m":19.793,"strict3m":15.785},{"d":"2026-05-08","vix":22.718,"strict":22.421,"spot":980.29,"mode":"interpolated","vix3m":17.972,"strict3m":14.916},{"d":"2026-05-11","vix":23.615,"strict":23.32,"spot":974.55,"mode":"interpolated","vix3m":18.16,"strict3m":14.718},{"d":"2026-05-12","vix":23.854,"strict":23.564,"spot":974.2,"mode":"interpolated","vix3m":18.138,"strict3m":14.768},{"d":"2026-05-13","vix":23.285,"strict":22.926,"spot":987.76,"mode":"interpolated","vix3m":19.01,"strict3m":15.807},{"d":"2026-05-14","vix":22.003,"strict":21.456,"spot":1005.78,"mode":"interpolated","vix3m":20.544,"strict3m":16.061},{"d":"2026-05-15","vix":22.599,"strict":22.195,"spot":993.92,"mode":"interpolated","vix3m":18.695,"strict3m":15.938},{"d":"2026-05-18","vix":22.976,"strict":22.545,"spot":996.18,"mode":"interpolated","vix3m":18.672,"strict3m":15.913},{"d":"2026-05-19","vix":22.394,"strict":22.01,"spot":996.52,"mode":"interpolated","vix3m":19.717,"strict3m":16.147},{"d":"2026-05-20","vix":21.487,"strict":21.091,"spot":1000.93,"mode":"interpolated","vix3m":18.601,"strict3m":15.723},{"d":"2026-05-21","vix":20.87,"strict":20.49,"spot":1000.74,"mode":"interpolated","vix3m":18.683,"strict3m":15.845},{"d":"2026-05-22","vix":19.682,"strict":19.406,"spot":1002.25,"mode":"interpolated","vix3m":18.704,"strict3m":15.986},{"d":"2026-05-25","vix":19.283,"strict":18.892,"spot":1009.52,"mode":"interpolated","vix3m":18.931,"strict3m":16.11},{"d":"2026-05-26","vix":20.029,"strict":19.914,"spot":1008.29,"mode":"extrapolated","vix3m":18.593,"strict3m":15.718},{"d":"2026-05-27","vix":19.648,"strict":19.396,"spot":1013.76,"mode":"extrapolated","vix3m":18.854,"strict3m":15.923},{"d":"2026-05-28","vix":19.274,"strict":19.031,"spot":1010.41,"mode":"extrapolated","vix3m":15.886,"strict3m":13.359},{"d":"2026-05-29","vix":19.867,"strict":19.728,"spot":1010.62,"mode":"extrapolated","vix3m":15.988,"strict3m":13.457},{"d":"2026-06-02","vix":19.744,"strict":18.771,"spot":1025.82,"mode":"interpolated","vix3m":16.844,"strict3m":14.062},{"d":"2026-06-04","vix":19.211,"strict":18.489,"spot":1030.29,"mode":"interpolated","vix3m":17.037,"strict3m":14.91},{"d":"2026-06-05","vix":19.295,"strict":18.489,"spot":1026.72,"mode":"interpolated","vix3m":17.048,"strict3m":15.116},{"d":"2026-06-08","vix":19.552,"strict":19.241,"spot":1013.89,"mode":"interpolated","vix3m":17.547,"strict3m":15.469},{"d":"2026-06-09","vix":18.679,"strict":18.148,"spot":1019.0,"mode":"interpolated","vix3m":17.365,"strict3m":15.296},{"d":"2026-06-10","vix":19.303,"strict":18.571,"spot":1009.37,"mode":"interpolated","vix3m":17.497,"strict3m":15.36},{"d":"2026-06-11","vix":18.367,"strict":17.738,"spot":1013.26,"mode":"interpolated","vix3m":17.48,"strict3m":15.539},{"d":"2026-06-12","vix":17.715,"strict":17.096,"spot":1026.89,"mode":"interpolated","vix3m":17.98,"strict3m":15.68},{"d":"2026-06-15","vix":17.141,"strict":16.76,"spot":1025.79,"mode":"interpolated","vix3m":17.629,"strict3m":15.846},{"d":"2026-06-16","vix":17.353,"strict":16.635,"spot":1027.83,"mode":"interpolated","vix3m":17.513,"strict3m":15.73},{"d":"2026-06-17","vix":16.858,"strict":16.226,"spot":1028.46,"mode":"interpolated","vix3m":17.314,"strict3m":15.5},{"d":"2026-06-18","vix":15.951,"strict":15.6,"spot":1027.9,"mode":"interpolated","vix3m":17.428,"strict3m":15.789},{"d":"2026-06-19","vix":16.993,"strict":16.435,"spot":1023.25,"mode":"interpolated","vix3m":17.687,"strict3m":16.06},{"d":"2026-06-22","vix":16.721,"strict":16.016,"spot":1023.77,"mode":"interpolated","vix3m":17.552,"strict3m":15.864},{"d":"2026-06-23","vix":16.673,"strict":16.164,"spot":1006.11,"mode":"interpolated","vix3m":17.703,"strict3m":16.29},{"d":"2026-06-24","vix":16.208,"strict":15.809,"spot":1012.09,"mode":"interpolated","vix3m":17.604,"strict3m":16.17},{"d":"2026-06-25","vix":16.427,"strict":16.258,"spot":1014.24,"mode":"interpolated","vix3m":17.366,"strict3m":15.903},{"d":"2026-06-26","vix":15.549,"strict":15.449,"spot":1011.23,"mode":"interpolated","vix3m":17.457,"strict3m":16.083},{"d":"2026-06-29","vix":17.422,"strict":16.823,"spot":1031.45,"mode":"extrapolated","vix3m":16.491,"strict3m":15.209},{"d":"2026-06-30","vix":14.877,"strict":14.393,"spot":1039.12,"mode":"interpolated","vix3m":16.021,"strict3m":14.61},{"d":"2026-07-01","vix":15.156,"strict":14.8,"spot":1035.24,"mode":"interpolated","vix3m":16.055,"strict3m":14.987},{"d":"2026-07-02","vix":14.925,"strict":14.367,"spot":1046.72,"mode":"interpolated","vix3m":15.907,"strict3m":14.716},{"d":"2026-07-03","vix":13.976,"strict":13.513,"spot":1059.71,"mode":"interpolated","vix3m":15.285,"strict3m":14.12},{"d":"2026-07-06","vix":14.534,"strict":14.097,"spot":1060.79,"mode":"interpolated","vix3m":15.095,"strict3m":14.088},{"d":"2026-07-07","vix":14.349,"strict":13.874,"spot":1054.66,"mode":"interpolated","vix3m":15.084,"strict3m":14.162},{"d":"2026-07-08","vix":14.457,"strict":14.189,"spot":1039.71,"mode":"interpolated","vix3m":15.727,"strict3m":14.848},{"d":"2026-07-09","vix":14.161,"strict":13.744,"spot":1057.12,"mode":"interpolated","vix3m":15.618,"strict3m":14.685},{"d":"2026-07-10","vix":14.634,"strict":14.043,"spot":1064.17,"mode":"interpolated","vix3m":15.494,"strict3m":14.434},{"d":"2026-07-13","vix":14.386,"strict":13.672,"spot":1068.58,"mode":"interpolated","vix3m":15.458,"strict3m":14.16},{"d":"2026-07-14","vix":14.097,"strict":13.673,"spot":1068.39,"mode":"interpolated","vix3m":15.225,"strict3m":14.278},{"d":"2026-07-15","vix":14.645,"strict":14.236,"spot":1071.84,"mode":"interpolated","vix3m":14.712,"strict3m":13.692},{"d":"2026-07-16","vix":14.544,"strict":13.945,"spot":1079.11,"mode":"interpolated","vix3m":14.662,"strict3m":13.567},{"d":"2026-07-17","vix":13.921,"strict":13.32,"spot":1085.54,"mode":"interpolated","vix3m":14.37,"strict3m":13.363},{"d":"2026-07-20","vix":14.493,"strict":14.019,"spot":1094.07,"mode":"interpolated","vix3m":14.772,"strict3m":13.741},{"d":"2026-07-21","vix":14.105,"strict":13.533,"spot":1097.21,"mode":"interpolated","vix3m":14.841,"strict3m":13.742},{"d":"2026-07-22","vix":14.068,"strict":13.82,"spot":1086.45,"mode":"interpolated","vix3m":14.628,"strict3m":13.884},{"d":"2026-07-23","vix":13.863,"strict":13.684,"spot":1084.99,"mode":"interpolated","vix3m":14.754,"strict3m":14.062},{"d":"2026-07-24","vix":14.157,"strict":13.896,"spot":1089.79,"mode":"interpolated","vix3m":15.017,"strict3m":14.194},{"d":"2026-07-27","vix":13.524,"strict":13.391,"spot":1083.4,"mode":"interpolated","vix3m":15.163,"strict3m":14.443},{"d":"2026-07-30","vix":13.742,"strict":13.667,"spot":1073.13,"mode":"interpolated","vix3m":14.239,"strict3m":12.058},{"d":"2026-07-31","vix":13.184,"strict":13.04,"spot":1085.54,"mode":"interpolated","vix3m":14.098,"strict3m":12.511},{"d":"2026-08-03","vix":14.279,"strict":14.128,"spot":1084.63,"mode":"interpolated","vix3m":14.228,"strict3m":12.809},{"d":"2026-08-04","vix":14.462,"strict":14.301,"spot":1082.64,"mode":"interpolated","vix3m":14.44,"strict3m":13.084},{"d":"2026-08-05","vix":14.311,"strict":14.014,"spot":1077.26,"mode":"interpolated","vix3m":14.36,"strict3m":13.039},{"d":"2026-08-06","vix":14.183,"strict":14.008,"spot":1084.85,"mode":"interpolated","vix3m":14.134,"strict3m":12.853},{"d":"2026-08-07","vix":13.869,"strict":13.685,"spot":1081.79,"mode":"interpolated","vix3m":13.992,"strict3m":12.723},{"d":"2026-08-10","vix":13.936,"strict":13.76,"spot":1084.04,"mode":"interpolated","vix3m":13.962,"strict3m":12.814},{"d":"2026-08-11","vix":13.725,"strict":13.552,"spot":1080.72,"mode":"interpolated","vix3m":13.496,"strict3m":12.498},{"d":"2026-08-13","vix":13.491,"strict":13.301,"spot":1080.25,"mode":"interpolated","vix3m":13.536,"strict3m":12.529},{"d":"2026-08-14","vix":13.734,"strict":13.491,"spot":1075.26,"mode":"interpolated","vix3m":13.517,"strict3m":12.495},{"d":"2026-08-17","vix":14.295,"strict":14.09,"spot":1084.47,"mode":"interpolated","vix3m":13.454,"strict3m":12.526},{"d":"2026-08-18","vix":14.004,"strict":13.714,"spot":1082.6,"mode":"interpolated","vix3m":13.339,"strict3m":12.469},{"d":"2026-08-19","vix":14.445,"strict":14.266,"spot":1074.82,"mode":"interpolated","vix3m":13.324,"strict3m":12.451},{"d":"2026-08-20","vix":15.16,"strict":14.965,"spot":1075.26,"mode":"interpolated","vix3m":13.401,"strict3m":12.483},{"d":"2026-08-21","vix":15.025,"strict":14.823,"spot":1080.71,"mode":"interpolated","vix3m":13.153,"strict3m":12.377},{"d":"2026-08-24","vix":15.764,"strict":15.332,"spot":1073.6,"mode":"interpolated","vix3m":13.554,"strict3m":12.709},{"d":"2026-08-25","vix":15.942,"strict":15.743,"spot":1072.92,"mode":"interpolated","vix3m":13.143,"strict3m":12.365},{"d":"2026-08-26","vix":15.938,"strict":15.962,"spot":1076.56,"mode":"extrapolated","vix3m":13.237,"strict3m":12.471},{"d":"2026-08-27","vix":15.748,"strict":15.699,"spot":1071.53,"mode":"extrapolated","vix3m":12.919,"strict3m":12.309},{"d":"2026-08-28","vix":15.929,"strict":15.917,"spot":1066.21,"mode":"extrapolated","vix3m":12.504,"strict3m":11.085},{"d":"2026-08-31","vix":15.097,"strict":14.831,"spot":1071.37,"mode":"interpolated","vix3m":12.732,"strict3m":11.544},{"d":"2026-09-01","vix":15.109,"strict":14.938,"spot":1068.61,"mode":"interpolated","vix3m":12.801,"strict3m":11.507},{"d":"2026-09-02","vix":15.356,"strict":15.093,"spot":1060.23,"mode":"interpolated","vix3m":12.451,"strict3m":11.233},{"d":"2026-09-03","vix":14.422,"strict":14.242,"spot":1063.48,"mode":"interpolated","vix3m":12.283,"strict3m":11.372},{"d":"2026-09-04","vix":13.808,"strict":13.723,"spot":1071.53,"mode":"interpolated","vix3m":12.243,"strict3m":11.347},{"d":"2026-09-07","vix":13.186,"strict":13.041,"spot":1080.69,"mode":"interpolated","vix3m":12.268,"strict3m":11.638},{"d":"2026-09-08","vix":13.117,"strict":12.993,"spot":1083.68,"mode":"interpolated","vix3m":12.253,"strict3m":11.526},{"d":"2026-09-09","vix":12.962,"strict":12.666,"spot":1083.06,"mode":"interpolated","vix3m":12.511,"strict3m":11.9},{"d":"2026-09-10","vix":12.325,"strict":12.201,"spot":1081.8,"mode":"interpolated","vix3m":12.416,"strict3m":11.784},{"d":"2026-09-11","vix":12.856,"strict":12.52,"spot":1074.59,"mode":"interpolated","vix3m":12.428,"strict3m":11.824},{"d":"2026-09-14","vix":12.897,"strict":12.695,"spot":1070.37,"mode":"interpolated","vix3m":13.01,"strict3m":12.269},{"d":"2026-09-15","vix":13.144,"strict":12.902,"spot":1069.46,"mode":"interpolated","vix3m":12.639,"strict3m":12.024},{"d":"2026-09-16","vix":13.696,"strict":13.246,"spot":1057.36,"mode":"interpolated","vix3m":13.258,"strict3m":12.555},{"d":"2026-09-17","vix":12.44,"strict":12.378,"spot":1069.77,"mode":"interpolated","vix3m":13.223,"strict3m":12.549},{"d":"2026-09-18","vix":12.565,"strict":12.302,"spot":1069.76,"mode":"interpolated","vix3m":12.703,"strict3m":12.02}]};
+
+// ------------------------------------------------------------------ helpers
+const $ = (id) => document.getElementById(id);
+const NS = "http://www.w3.org/2000/svg";
+const fmt = (x, d = 2) => x == null ? "–" : x.toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d });
+const MON = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+const ictDate = (ms) => new Date(ms + 7 * 3600e3);                 // shift so getUTC* reads Bangkok
+const fDate = (ms) => { const d = ictDate(ms); return `${d.getUTCDate()} ${MON[d.getUTCMonth()]} ${d.getUTCFullYear()}`; };
+const fDateTime = (ms) => { const d = ictDate(ms); return `${fDate(ms)} ${String(d.getUTCHours()).padStart(2,"0")}:${String(d.getUTCMinutes()).padStart(2,"0")}`; };
+const expLabel = (e) => { const s = String(e); return `${+s.slice(6)} ${MON[+s.slice(4,6)-1]}`; };
+const dayMs = (d) => Date.parse(d + "T10:00:00+07:00");
+const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+
+function el(tag, attrs = {}, parent) {
+  const n = document.createElementNS(NS, tag);
+  for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, v);
+  if (parent) parent.appendChild(n);
+  return n;
+}
+function text(parent, x, y, s, attrs = {}) { const t = el("text", { x, y, ...attrs }, parent); t.textContent = s; return t; }
+function niceTicks(lo, hi, n = 5) {
+  const span = hi - lo || 1, step0 = span / n, mag = Math.pow(10, Math.floor(Math.log10(step0)));
+  const step = [1, 2, 2.5, 5, 10].map(m => m * mag).find(s => span / s <= n) || 10 * mag;
+  // span the data fully: first tick at or below lo, last at or above hi
+  const out = []; for (let v = Math.floor(lo / step) * step; v < hi + step - 1e-9; v += step) out.push(+v.toFixed(10));
+  return out;
+}
+const scale = (d0, d1, r0, r1) => (v) => r0 + (v - d0) / (d1 - d0 || 1) * (r1 - r0);
+
+function frame(host, height, pad) {
+  host.innerHTML = "";
+  // a hidden or not-yet-laid-out container reports 0 width; never draw negative geometry
+  const W = Math.max(host.clientWidth, 300), H = height;
+  const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, height: H, role: "img" }, host);
+  return { svg, W, H, x0: pad.l, x1: W - pad.r, y0: H - pad.b, y1: pad.t };
+}
+function yAxis(f, ys, ticks, suffix = "") {
+  for (const t of ticks) {
+    const y = ys(t);
+    el("line", { x1: f.x0, x2: f.x1, y1: y, y2: y, stroke: css("--grid"), "stroke-width": 1 }, f.svg);
+    text(f.svg, f.x0 - 8, y + 4, t + suffix, { "text-anchor": "end" });
+  }
+}
+function monthTicks(f, xs, start, end, months) {
+  const d0 = ictDate(start); let m = new Date(Date.UTC(d0.getUTCFullYear(), d0.getUTCMonth() + 1, 1));
+  const step = months > 12 ? 3 : months > 6 ? 2 : 1;
+  while (m.getTime() <= end) {
+    const x = xs(m.getTime() - 7 * 3600e3);
+    el("line", { x1: x, x2: x, y1: f.y0, y2: f.y0 + 4, stroke: css("--axis") }, f.svg);
+    text(f.svg, x, f.y0 + 17, m.getUTCMonth() === 0 ? m.getUTCFullYear() : MON[m.getUTCMonth()], { "text-anchor": "middle" });
+    m = new Date(Date.UTC(m.getUTCFullYear(), m.getUTCMonth() + step, 1));
+  }
+}
+function tip(host) {
+  let t = host.querySelector(".tip");
+  if (!t) { t = document.createElement("div"); t.className = "tip"; t.hidden = true; host.appendChild(t); }
+  return t;
+}
+function placeTip(host, t, px, py) {
+  const w = t.offsetWidth, W = host.clientWidth;
+  t.style.left = Math.min(Math.max(px + 14, 0), W - w) + "px";
+  if (px + 14 + w > W) t.style.left = Math.max(px - w - 14, 0) + "px";
+  t.style.top = Math.max(py - 10, 0) + "px";
+}
+const row = (color, label, val, dot = true) =>
+  `<div class="r"><i class="${dot ? "keydot" : "key"}" style="background:${color}"></i>${label}<b>${val}</b></div>`;
+
+// ------------------------------------------------------------------ header, banners, hero
+const now = Date.parse(D.captured_utc);
+const SESSION = D.session || D.captured_utc.slice(0, 10);
+const SESS_LBL = `${fDate(dayMs(SESSION))} ${D.session_closed === false ? "(session open)" : "close"}`;
+const DAILY = (D.daily || []).filter(r => r.vix != null);
+// the settlement close for the quote session: published T+1, so the 08:00 run already has it
+const CLOSE = DAILY.length ? DAILY[DAILY.length - 1] : null;
+const ON_CLOSE = !!(CLOSE && CLOSE.d >= SESSION);
+(function meta() {
+  // weekend/holiday runs recompute from the last session's quotes: say so
+  const last = D.history.length ? Date.parse(D.history[D.history.length - 1].t) : now;
+  const quiet = fDate(last) !== fDate(now)
+    ? ` · option quotes unchanged since ${fDateTime(last)} (no TFEX session since)` : "";
+  // the run is at 08:00 Bangkok, before the TFEX open: the quotes are the previous session's close
+  $("meta").textContent = `Updated ${fDateTime(now)} Bangkok${quiet} · Quotes: ${SESS_LBL} (TradingView, 15-min delayed) · History: TFEX settlement prices`;
+})();
+
+(function banners() {
+  const out = [];
+  const ageH = (Date.now() - now) / 3600e3;
+  if (ageH > 80) out.push(["crit", `<b>Stale data.</b> Last update was ${Math.round(ageH / 24)} days ago; the collector may have stopped.`]);
+  for (const e of D.errors || []) out.push(["crit", `<b>Source failed.</b> ${e}`]);
+  for (const w of D.warnings || []) out.push(["warn", `<b>Note.</b> ${w}`]);
+  if (D.mode === "extrapolated") out.push(["warn", "<b>Extrapolated.</b> No expiry is available on both sides of 30 days, so the index is extrapolated from the two nearest expiries."]);
+  // settlements arrive T+1; more than a long weekend behind means the TFEX download is failing
+  if (DAILY.length && (now - dayMs(DAILY[DAILY.length - 1].d)) / 864e5 > 6)
+    out.push(["warn", `<b>Settlement history behind.</b> The last TFEX settlement close is ${fDate(dayMs(DAILY[DAILY.length - 1].d))}.`]);
+  $("banners").innerHTML = out.map(([c, h]) => `<div class="banner ${c}">${h}</div>`).join("");
+})();
+
+// every quote-derived panel says which chain snapshot it is drawn from. Before the TFEX open many
+// strikes carry no bid, so the strict strip truncates early and those panels read low - worth saying
+// wherever they are shown, since the headline next to them comes from settlement prices.
+(function quoteSource() {
+  const txt = ON_CLOSE
+    ? `Option chain as read ${fDateTime(now)}, before the open - strikes not yet quoted are missing.`
+    : `Option chain as read ${fDateTime(now)}.`;
+  for (const el of document.querySelectorAll(".qsrc")) el.textContent = txt;
+})();
+
+(function hero() {
+  // Which source leads. The daily run is at 08:00 Bangkok, before the TFEX open: the option quotes
+  // it reads are the previous session's, and many strikes have no bid yet, which truncates the
+  // strict strip. TFEX has by then published that session's settlements - a complete set of prices
+  // for the same session - so the settlement close leads whenever it has caught up with the quotes.
+  const close = CLOSE, onClose = ON_CLOSE;
+  const ix = onClose ? close.vix : D.index.tail;
+  const strict = onClose ? close.strict : D.index.strict;
+  const srcLine = onClose ? `TFEX settlement close, ${fDate(dayMs(close.d))}` : `option quotes, ${SESS_LBL}`;
+  const ix3 = onClose ? close.vix3m : (D.index3m || {}).tail;
+  const slope = ix3 != null && ix != null ? ix3 - ix : null;
+  // compare like with like: the previous value from the same source
+  let ref = null, refLabel = "";
+  if (onClose) {
+    const p = DAILY.length > 1 ? DAILY[DAILY.length - 2] : null;
+    if (p) { ref = p.vix; refLabel = `vs ${fDate(dayMs(p.d))}`; }
+  } else {
+    const p = [...D.history].reverse().find(h => h.sd !== SESSION && h.vix != null);
+    if (p) { ref = p.vix; refLabel = `vs ${fDate(dayMs(p.sd))}`; }
+    else if (close) { ref = close.vix; refLabel = `vs ${fDate(dayMs(close.d))} settlement close`; }
+  }
+  let delta = `<div class="delta flat">First reading</div>`;
+  if (ref != null && ix != null) {
+    const d = ix - ref, cls = Math.abs(d) < 0.005 ? "flat" : d > 0 ? "up" : "down";
+    const arrow = cls === "up" ? "▲" : cls === "down" ? "▼" : "■";
+    delta = `<div class="delta ${cls}">${arrow} ${d > 0 ? "+" : ""}${fmt(d)} pts ${refLabel}</div>`;
+  }
+  const spread = D.rv != null ? ix - D.rv : null;
+  $("hero").innerHTML = `
+    <div><div class="lbl">SET50 VIX, 30-day</div><div class="big">${fmt(ix)}</div>${delta}<div class="sub">${srcLine}</div></div>
+    <div><div class="lbl">SET50 VIX, 3-month</div><div class="val">${fmt(ix3)}</div><div class="sub">93-day · 3M − 1M ${slope != null ? (slope > 0 ? "+" : "") + fmt(slope) : "–"}</div></div>
+    <div><div class="lbl">Strict Cboe method</div><div class="val">${fmt(strict)}</div><div class="sub">listed strikes only, 30-day</div></div>
+    <div><div class="lbl">Realized vol, 21 days</div><div class="val">${D.rv != null ? fmt(D.rv) + "%" : "–"}</div><div class="sub">SET50 daily closes</div></div>
+    <div><div class="lbl">Implied minus realized</div><div class="val">${spread != null ? (spread > 0 ? "+" : "") + fmt(spread) : "–"}</div><div class="sub">volatility points</div></div>
+    <div><div class="lbl">SET50</div><div class="val">${fmt(D.spot)}</div><div class="sub">${expLabel(D.near)} ${Math.round(D.w_near * 100)}% · ${expLabel(D.next)} ${Math.round(D.w_next * 100)}% blend</div></div>`;
+})();
+
+// ------------------------------------------------------------------ chart 1: history
+(function histStats() {
+  if (!DAILY.length) { $("hist-stats").innerHTML = ""; return; }
+  const last = DAILY[DAILY.length - 1], vals = DAILY.map(r => r.vix);
+  const lo = DAILY.reduce((a, r) => r.vix < a.vix ? r : a), hi = DAILY.reduce((a, r) => r.vix > a.vix ? r : a);
+  const share = 100 * vals.filter(v => v <= last.vix).length / vals.length;
+  const pct = share < 1 ? "<1" : share > 99 ? ">99" : Math.round(share);
+  const avg = vals.reduce((a, v) => a + v, 0) / vals.length;
+  const since = fDate(dayMs(DAILY[0].d));
+  $("hist-stats").innerHTML =
+    `<span>Last close<b>${fmt(last.vix)}</b><small>${fDate(dayMs(last.d))}</small></span>` +
+    `<span>Percentile since ${since}<b>${pct}%</b></span>` +
+    `<span>Average<b>${fmt(avg)}</b></span>` +
+    `<span>Low<b>${fmt(lo.vix)}</b><small>${fDate(dayMs(lo.d))}</small></span>` +
+    `<span>High<b>${fmt(hi.vix)}</b><small>${fDate(dayMs(hi.d))}</small></span>`;
+})();
+
+let months = 12;
+function drawHistory() {
+  const host = $("c-hist");
+  const lastDaily = DAILY.length ? DAILY[DAILY.length - 1].d : "";
+  const end = Math.max(now, ...D.realized.map(r => dayMs(r.d)));
+  const start = end - months * 30.44 * 864e5;
+  const rv = D.realized.map(r => ({ x: dayMs(r.d), y: r.rv })).filter(p => p.x >= start);
+  const vx = DAILY.map(r => ({ x: dayMs(r.d), y: r.vix, s: r.strict })).filter(p => p.x >= start);
+  // live readings only for sessions the settlement series has not reached yet (T+1 publication)
+  const lv = D.history.filter(h => h.vix != null && h.sd > lastDaily)
+    .map(h => ({ x: dayMs(h.sd), y: h.vix, s: h.strict })).filter(p => p.x >= start);
+  const f = frame(host, 300, { t: 12, r: 92, b: 26, l: 40 });
+  const all = [...rv, ...vx, ...lv].map(p => p.y);
+  const ticks = niceTicks(0, Math.max(...all, 10) * 1.05, 5);
+  const ys = scale(0, ticks[ticks.length - 1], f.y0, f.y1);
+  const xs = scale(start, end, f.x0, f.x1);
+  yAxis(f, ys, ticks, "%");
+  el("line", { x1: f.x0, x2: f.x1, y1: f.y0, y2: f.y0, stroke: css("--axis") }, f.svg);
+  monthTicks(f, xs, start, end, months);
+  const path = (pts) => pts.map((p, i) => `${i ? "L" : "M"}${xs(p.x).toFixed(1)},${ys(p.y).toFixed(1)}`).join("");
+  // end labels: keep the two apart when the series finish close together
+  let yVix = null, yRv = null;
+  const lastV = lv.length ? lv[lv.length - 1] : vx[vx.length - 1];
+  if (lastV) yVix = ys(lastV.y) + 4;
+  if (rv.length) yRv = ys(rv[rv.length - 1].y) + 4;
+  if (yVix != null && yRv != null && Math.abs(yVix - yRv) < 14) {
+    const mid = (yVix + yRv) / 2, up = yVix < yRv ? -7 : 7;
+    yVix = mid + up; yRv = mid - up;
+  }
+  if (rv.length) {
+    el("path", { d: path(rv), fill: "none", stroke: css("--s-rv"), "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round" }, f.svg);
+    text(f.svg, f.x1 + 10, yRv, `RV ${fmt(rv[rv.length - 1].y, 1)}%`, { class: "dl" });
+  }
+  if (vx.length > 1) el("path", { d: path(vx), fill: "none", stroke: css("--s-vix"), "stroke-width": 2, "stroke-linejoin": "round" }, f.svg);
+  if (vx.length && lv.length) {
+    // dashed bridge from the last settlement close to today's live reading
+    const a = vx[vx.length - 1], b = lv[0];
+    el("path", { d: `M${xs(a.x)},${ys(a.y)}L${xs(b.x)},${ys(b.y)}`, fill: "none", stroke: css("--s-vix"), "stroke-width": 1.5, "stroke-dasharray": "3 3" }, f.svg);
+  }
+  for (const p of lv) el("circle", { cx: xs(p.x), cy: ys(p.y), r: 4.5, fill: css("--surface"), stroke: css("--s-vix"), "stroke-width": 2 }, f.svg);
+  if (lastV) text(f.svg, f.x1 + 10, yVix, `VIX ${fmt(lastV.y, 1)}`, { class: "dl strong" });
+  // hover: crosshair + nearest values
+  const t = tip(host);
+  const cross = el("line", { y1: f.y1, y2: f.y0, stroke: css("--axis"), visibility: "hidden" }, f.svg);
+  const hit = el("rect", { x: f.x0, y: f.y1, width: f.x1 - f.x0, height: f.y0 - f.y1, fill: "transparent" }, f.svg);
+  const nearest = (pts, x, tol) => { let b = null; for (const p of pts) if (!b || Math.abs(p.x - x) < Math.abs(b.x - x)) b = p; return b && Math.abs(b.x - x) <= tol ? b : null; };
+  hit.addEventListener("mousemove", (ev) => {
+    const r = f.svg.getBoundingClientRect(), px = (ev.clientX - r.left) * f.W / r.width;
+    const x = start + (px - f.x0) / (f.x1 - f.x0) * (end - start);
+    const tol = Math.max(2, months / 3) * 864e5;
+    const a = nearest(rv, x, 4 * 864e5), c = nearest(lv, x, tol), b = c ? null : nearest(vx, x, tol);
+    const v = c || b;
+    if (!a && !v) { t.hidden = true; cross.setAttribute("visibility", "hidden"); return; }
+    const at = (v || a).x;
+    cross.setAttribute("x1", xs(at)); cross.setAttribute("x2", xs(at)); cross.setAttribute("visibility", "visible");
+    t.innerHTML = `<div class="t">${fDate((v || a).x)}${c ? " · quotes" : ""}</div>` +
+      (v ? row(css("--s-vix"), c ? "SET50 VIX (quotes)" : "SET50 VIX (settlement)", fmt(v.y)) : "") +
+      (v && v.s != null ? row(css("--s-strict"), "Strict Cboe", fmt(v.s)) : "") +
+      (a ? row(css("--s-rv"), "Realized 21d", fmt(a.y) + "%", false) : "");
+    t.hidden = false; placeTip(host, t, xs(at), ys((v || a).y));
+  });
+  hit.addEventListener("mouseleave", () => { t.hidden = true; cross.setAttribute("visibility", "hidden"); });
+}
+$("range").addEventListener("click", (e) => {
+  const b = e.target.closest("button"); if (!b) return;
+  months = +b.dataset.m;
+  for (const x of $("range").children) x.setAttribute("aria-pressed", x === b);
+  drawHistory();
+});
+
+// ------------------------------------------------------------------ chart 1b: 1M vs 3M
+(function termStats() {
+  const d3 = DAILY.filter(r => r.vix3m != null);
+  if (!d3.length) { $("term-stats").innerHTML = ""; return; }
+  const last = d3[d3.length - 1], sp = d3.map(r => r.vix3m - r.vix);
+  const cur = last.vix3m - last.vix;
+  const share = 100 * sp.filter(v => v > 0).length / sp.length;
+  const lo = d3.reduce((a, r) => (r.vix3m - r.vix) < (a.vix3m - a.vix) ? r : a);
+  const hi = d3.reduce((a, r) => (r.vix3m - r.vix) > (a.vix3m - a.vix) ? r : a);
+  const sgn = (v) => (v > 0 ? "+" : "") + fmt(v);
+  $("term-stats").innerHTML =
+    `<span>1M<b>${fmt(last.vix)}</b><small>${fDate(dayMs(last.d))}</small></span>` +
+    `<span>3M<b>${fmt(last.vix3m)}</b></span>` +
+    `<span>3M − 1M<b>${sgn(cur)}</b><small>${cur > 0 ? "contango" : cur < 0 ? "backwardation" : "flat"}</small></span>` +
+    `<span>Days in contango since ${fDate(dayMs(d3[0].d))}<b>${Math.round(share)}%</b></span>` +
+    `<span>Widest contango<b>${sgn(hi.vix3m - hi.vix)}</b><small>${fDate(dayMs(hi.d))}</small></span>` +
+    `<span>Deepest backwardation<b>${sgn(lo.vix3m - lo.vix)}</b><small>${fDate(dayMs(lo.d))}</small></span>`;
+})();
+
+let months2 = 12;
+function drawHorizons() {
+  const host = $("c-horizons");
+  const lastDaily = DAILY.length ? DAILY[DAILY.length - 1].d : "";
+  const end = Math.max(now, ...DAILY.map(r => dayMs(r.d)));
+  const start = end - months2 * 30.44 * 864e5;
+  const rows = DAILY.filter(r => r.vix3m != null).map(r => ({ x: dayMs(r.d), y1: r.vix, y3: r.vix3m })).filter(p => p.x >= start);
+  const lv = D.history.filter(h => h.vix != null && h.vix3m != null && h.sd > lastDaily)
+    .map(h => ({ x: dayMs(h.sd), y1: h.vix, y3: h.vix3m })).filter(p => p.x >= start);
+  const all = [...rows, ...lv];
+  // two panels in one SVG: the levels on top, the spread below, sharing the x scale
+  const H = 380, gapY = 28, sp_h = 96;
+  const f = frame(host, H, { t: 12, r: 92, b: 26, l: 40 });
+  const top = { svg: f.svg, x0: f.x0, x1: f.x1, y1: f.y1, y0: f.y0 - sp_h - gapY };
+  const bot = { svg: f.svg, x0: f.x0, x1: f.x1, y1: f.y0 - sp_h, y0: f.y0 };
+  const xs = scale(start, end, f.x0, f.x1);
+  // levels
+  const lv_all = all.flatMap(p => [p.y1, p.y3]);
+  const tk = niceTicks(Math.max(0, Math.min(...lv_all) - 2), Math.max(...lv_all) + 2, 6);
+  const ys = scale(tk[0], tk[tk.length - 1], top.y0, top.y1);
+  yAxis(top, ys, tk, "%");
+  el("line", { x1: f.x0, x2: f.x1, y1: top.y0, y2: top.y0, stroke: css("--axis") }, f.svg);
+  const path = (pts, k) => pts.map((p, i) => `${i ? "L" : "M"}${xs(p.x).toFixed(1)},${ys(p[k]).toFixed(1)}`).join("");
+  if (rows.length > 1) {
+    el("path", { d: path(rows, "y3"), fill: "none", stroke: css("--s-vix3m"), "stroke-width": 2, "stroke-linejoin": "round" }, f.svg);
+    el("path", { d: path(rows, "y1"), fill: "none", stroke: css("--s-vix"), "stroke-width": 2, "stroke-linejoin": "round" }, f.svg);
+  }
+  if (rows.length && lv.length) {
+    const a = rows[rows.length - 1], b = lv[0];
+    for (const [k, c] of [["y1", "--s-vix"], ["y3", "--s-vix3m"]])
+      el("path", { d: `M${xs(a.x)},${ys(a[k])}L${xs(b.x)},${ys(b[k])}`, fill: "none", stroke: css(c), "stroke-width": 1.5, "stroke-dasharray": "3 3" }, f.svg);
+  }
+  for (const p of lv) for (const [k, c] of [["y3", "--s-vix3m"], ["y1", "--s-vix"]])
+    el("circle", { cx: xs(p.x), cy: ys(p[k]), r: 4.5, fill: css("--surface"), stroke: css(c), "stroke-width": 2 }, f.svg);
+  const last = all[all.length - 1];
+  if (last) {
+    let ya = ys(last.y1) + 4, yb = ys(last.y3) + 4;
+    if (Math.abs(ya - yb) < 14) { const mid = (ya + yb) / 2, up = ya < yb ? -7 : 7; ya = mid + up; yb = mid - up; }
+    text(f.svg, f.x1 + 10, ya, `1M ${fmt(last.y1, 1)}`, { class: "dl strong" });
+    text(f.svg, f.x1 + 10, yb, `3M ${fmt(last.y3, 1)}`, { class: "dl strong", fill: css("--s-vix3m") });
+  }
+  // spread panel: 3M − 1M, filled from zero, green above (contango) and orange below (backwardation)
+  const spread = all.map(p => ({ x: p.x, y: p.y3 - p.y1 }));
+  const smax = Math.max(1, ...spread.map(p => Math.abs(p.y)));
+  const stk = niceTicks(-smax, smax, 4);
+  const sys = scale(stk[0], stk[stk.length - 1], bot.y0, bot.y1);
+  yAxis(bot, sys, stk.filter((_, i) => i % 2 === 0 || stk.length <= 5), "");
+  const z = sys(0);
+  el("line", { x1: f.x0, x2: f.x1, y1: z, y2: z, stroke: css("--axis") }, f.svg);
+  const area = (pts, clipAbove) => {
+    if (pts.length < 2) return;
+    const d = `M${xs(pts[0].x)},${z}` + pts.map(p => `L${xs(p.x).toFixed(1)},${sys(p.y).toFixed(1)}`).join("") + `L${xs(pts[pts.length - 1].x)},${z}Z`;
+    const id = `clip-${clipAbove ? "up" : "dn"}-${host.id}`;
+    const cp = el("clipPath", { id }, f.svg);
+    el("rect", { x: f.x0, y: clipAbove ? bot.y1 : z, width: f.x1 - f.x0, height: clipAbove ? z - bot.y1 : bot.y0 - z }, cp);
+    el("path", { d, fill: css(clipAbove ? "--s-strict" : "--s-rv"), "fill-opacity": 0.35, stroke: "none", "clip-path": `url(#${id})` }, f.svg);
+  };
+  area(spread, true); area(spread, false);
+  el("path", { d: spread.map((p, i) => `${i ? "L" : "M"}${xs(p.x).toFixed(1)},${sys(p.y).toFixed(1)}`).join(""), fill: "none", stroke: css("--ink-2"), "stroke-width": 1.2, "stroke-linejoin": "round" }, f.svg);
+  text(f.svg, f.x0, bot.y1 - 8, "3M − 1M, volatility points", { class: "note" });
+  if (spread.length) {
+    const s_ = spread[spread.length - 1].y;
+    text(f.svg, f.x1 + 10, sys(s_) + 4, `${s_ > 0 ? "+" : ""}${fmt(s_, 1)}`, { class: "dl strong" });
+  }
+  el("line", { x1: f.x0, x2: f.x1, y1: bot.y0, y2: bot.y0, stroke: css("--axis") }, f.svg);
+  monthTicks(f, xs, start, end, months2);
+  // hover: one crosshair across both panels
+  const t = tip(host);
+  const cross = el("line", { y1: top.y1, y2: bot.y0, stroke: css("--axis"), visibility: "hidden" }, f.svg);
+  const hit = el("rect", { x: f.x0, y: top.y1, width: f.x1 - f.x0, height: bot.y0 - top.y1, fill: "transparent" }, f.svg);
+  hit.addEventListener("mousemove", (ev) => {
+    const r = f.svg.getBoundingClientRect(), px = (ev.clientX - r.left) * f.W / r.width;
+    const x = start + (px - f.x0) / (f.x1 - f.x0) * (end - start);
+    let b = null; for (const p of all) if (!b || Math.abs(p.x - x) < Math.abs(b.x - x)) b = p;
+    if (!b || Math.abs(b.x - x) > Math.max(2, months2 / 3) * 864e5) { t.hidden = true; cross.setAttribute("visibility", "hidden"); return; }
+    const quote = lv.includes(b), d = b.y3 - b.y1;
+    cross.setAttribute("x1", xs(b.x)); cross.setAttribute("x2", xs(b.x)); cross.setAttribute("visibility", "visible");
+    t.innerHTML = `<div class="t">${fDate(b.x)}${quote ? " · quotes" : ""}</div>` +
+      row(css("--s-vix"), "VIX 1M", fmt(b.y1)) + row(css("--s-vix3m"), "VIX 3M", fmt(b.y3)) +
+      row(css(d >= 0 ? "--s-strict" : "--s-rv"), "3M − 1M", (d > 0 ? "+" : "") + fmt(d));
+    t.hidden = false; placeTip(host, t, xs(b.x), ys(b.y1));
+  });
+  hit.addEventListener("mouseleave", () => { t.hidden = true; cross.setAttribute("visibility", "hidden"); });
+}
+$("range2").addEventListener("click", (e) => {
+  const b = e.target.closest("button"); if (!b) return;
+  months2 = +b.dataset.m;
+  for (const x of $("range2").children) x.setAttribute("aria-pressed", x === b);
+  drawHorizons();
+});
+
+// ------------------------------------------------------------------ chart 1c: 10-day z-score of the spread
+// Settlement closes only (same-source pairs). Sample SD over the 10-day window; a window with no
+// dispersion (SD < 1e-9) yields no score rather than an infinite one.
+const ZWIN = 10;
+const ZS = (() => {
+  const rows = DAILY.filter(r => r.vix3m != null).map(r => ({ d: r.d, x: dayMs(r.d), sp: r.vix3m - r.vix }));
+  const out = [];
+  for (let i = ZWIN - 1; i < rows.length; i++) {
+    const w = rows.slice(i - ZWIN + 1, i + 1).map(r => r.sp);
+    const m = w.reduce((a, v) => a + v, 0) / w.length;
+    const sd = Math.sqrt(w.reduce((a, v) => a + (v - m) ** 2, 0) / (w.length - 1));
+    if (sd < 1e-9) continue;
+    out.push({ d: rows[i].d, x: rows[i].x, sp: rows[i].sp, m, sd, z: (rows[i].sp - m) / sd });
+  }
+  return out;
+})();
+
+(function zStats() {
+  if (!ZS.length) { $("z-stats").innerHTML = ""; return; }
+  const last = ZS[ZS.length - 1];
+  const sgn = (v, n = 2) => (v > 0 ? "+" : "") + fmt(v, n);
+  const beyond2 = 100 * ZS.filter(r => Math.abs(r.z) > 2).length / ZS.length;
+  const lo = ZS.reduce((a, r) => r.z < a.z ? r : a), hi = ZS.reduce((a, r) => r.z > a.z ? r : a);
+  $("z-stats").innerHTML =
+    `<span>Z-score<b>${sgn(last.z)}</b><small>${fDate(last.x)}</small></span>` +
+    `<span>Spread today<b>${sgn(last.sp)}</b></span>` +
+    `<span>10-day mean<b>${sgn(last.m)}</b></span>` +
+    `<span>10-day SD<b>${fmt(last.sd)}</b></span>` +
+    `<span>Days beyond ±2<b>${beyond2.toFixed(1)}%</b><small>of ${ZS.length}</small></span>` +
+    `<span>Highest<b>${sgn(hi.z)}</b><small>${fDate(hi.x)}</small></span>` +
+    `<span>Lowest<b>${sgn(lo.z)}</b><small>${fDate(lo.x)}</small></span>`;
+})();
+
+let months3 = 12;
+function drawZscore() {
+  const host = $("c-zscore");
+  const end = Math.max(now, ...DAILY.map(r => dayMs(r.d)));
+  const start = end - months3 * 30.44 * 864e5;
+  const pts = ZS.filter(p => p.x >= start);
+  const f = frame(host, 260, { t: 12, r: 92, b: 26, l: 40 });
+  const zmax = Math.max(2.5, ...pts.map(p => Math.abs(p.z))) * 1.05;
+  const tk = niceTicks(-zmax, zmax, 6);
+  const ys = scale(tk[0], tk[tk.length - 1], f.y0, f.y1);
+  const xs = scale(start, end, f.x0, f.x1);
+  yAxis(f, ys, tk, "");
+  // ±2 bands and the zero line
+  for (const v of [-2, 2]) el("line", { x1: f.x0, x2: f.x1, y1: ys(v), y2: ys(v), stroke: css("--axis"), "stroke-dasharray": "4 4" }, f.svg);
+  const z0 = ys(0);
+  el("line", { x1: f.x0, x2: f.x1, y1: z0, y2: z0, stroke: css("--axis") }, f.svg);
+  el("line", { x1: f.x0, x2: f.x1, y1: f.y0, y2: f.y0, stroke: css("--axis") }, f.svg);
+  monthTicks(f, xs, start, end, months3);
+  // fill from zero, green above and orange below, then the line on top
+  if (pts.length > 1) {
+    const d = `M${xs(pts[0].x)},${z0}` + pts.map(p => `L${xs(p.x).toFixed(1)},${ys(p.z).toFixed(1)}`).join("") + `L${xs(pts[pts.length - 1].x)},${z0}Z`;
+    for (const [up, c] of [[true, "--s-strict"], [false, "--s-rv"]]) {
+      const id = `clip-z-${up ? "up" : "dn"}`;
+      const cp = el("clipPath", { id }, f.svg);
+      el("rect", { x: f.x0, y: up ? f.y1 : z0, width: f.x1 - f.x0, height: up ? z0 - f.y1 : f.y0 - z0 }, cp);
+      el("path", { d, fill: css(c), "fill-opacity": 0.3, stroke: "none", "clip-path": `url(#${id})` }, f.svg);
+    }
+    el("path", { d: pts.map((p, i) => `${i ? "L" : "M"}${xs(p.x).toFixed(1)},${ys(p.z).toFixed(1)}`).join(""), fill: "none", stroke: css("--ink-2"), "stroke-width": 1.5, "stroke-linejoin": "round" }, f.svg);
+    // mark the days beyond ±2
+    for (const p of pts) if (Math.abs(p.z) > 2)
+      el("circle", { cx: xs(p.x), cy: ys(p.z), r: 3, fill: css(p.z > 0 ? "--s-strict" : "--s-rv") }, f.svg);
+    const last = pts[pts.length - 1];
+    text(f.svg, f.x1 + 10, ys(last.z) + 4, `z ${last.z > 0 ? "+" : ""}${fmt(last.z, 1)}`, { class: "dl strong" });
+  }
+  text(f.svg, f.x0 + 4, ys(2) - 5, "+2", { class: "note" });
+  text(f.svg, f.x0 + 4, ys(-2) + 13, "−2", { class: "note" });
+  // hover
+  const t = tip(host);
+  const cross = el("line", { y1: f.y1, y2: f.y0, stroke: css("--axis"), visibility: "hidden" }, f.svg);
+  const hit = el("rect", { x: f.x0, y: f.y1, width: f.x1 - f.x0, height: f.y0 - f.y1, fill: "transparent" }, f.svg);
+  hit.addEventListener("mousemove", (ev) => {
+    const r = f.svg.getBoundingClientRect(), px = (ev.clientX - r.left) * f.W / r.width;
+    const x = start + (px - f.x0) / (f.x1 - f.x0) * (end - start);
+    let b = null; for (const p of pts) if (!b || Math.abs(p.x - x) < Math.abs(b.x - x)) b = p;
+    if (!b || Math.abs(b.x - x) > Math.max(2, months3 / 3) * 864e5) { t.hidden = true; cross.setAttribute("visibility", "hidden"); return; }
+    cross.setAttribute("x1", xs(b.x)); cross.setAttribute("x2", xs(b.x)); cross.setAttribute("visibility", "visible");
+    const sg = (v) => (v > 0 ? "+" : "") + fmt(v);
+    t.innerHTML = `<div class="t">${fDate(b.x)}</div>` +
+      row(css(b.z >= 0 ? "--s-strict" : "--s-rv"), "Z-score (10d)", sg(b.z)) +
+      row(css("--ink-2"), "3M − 1M", sg(b.sp), false) +
+      `<div class="r" style="color:var(--muted)">10-day mean / SD<b>${sg(b.m)} / ${fmt(b.sd)}</b></div>`;
+    t.hidden = false; placeTip(host, t, xs(b.x), ys(b.z));
+  });
+  hit.addEventListener("mouseleave", () => { t.hidden = true; cross.setAttribute("visibility", "hidden"); });
+}
+$("range3").addEventListener("click", (e) => {
+  const b = e.target.closest("button"); if (!b) return;
+  months3 = +b.dataset.m;
+  for (const x of $("range3").children) x.setAttribute("aria-pressed", x === b);
+  drawZscore();
+});
+
+// ------------------------------------------------------------------ chart 1d: z-score vs SET50 futures
+const FUT = (D.futures || []).map(r => ({ d: r.d, x: dayMs(r.d), y: r.c }));
+(function futStats() {
+  if (!FUT.length || !ZS.length) { $("fut-stats").innerHTML = ""; return; }
+  const last = FUT[FUT.length - 1], prev = FUT.length > 1 ? FUT[FUT.length - 2] : null;
+  const z = ZS[ZS.length - 1];
+  const chg = prev ? last.y - prev.y : null;
+  const sgn = (v, n = 2) => (v > 0 ? "+" : "") + fmt(v, n);
+  // what the futures did over the next 10 sessions after each |z| > 2 day (a description, not a forecast)
+  const byDate = new Map(FUT.map((r, i) => [r.d, i]));
+  const fwd = (sign) => {
+    const rets = [];
+    for (const r of ZS) if (sign * r.z > 2 && byDate.has(r.d)) {
+      const i = byDate.get(r.d); if (i + 10 < FUT.length) rets.push(100 * (FUT[i + 10].y / FUT[i].y - 1));
+    }
+    return rets.length ? { n: rets.length, mean: rets.reduce((a, v) => a + v, 0) / rets.length, up: 100 * rets.filter(v => v > 0).length / rets.length } : null;
+  };
+  const up = fwd(1), dn = fwd(-1);
+  $("fut-stats").innerHTML =
+    `<span>S501! close<b>${fmt(last.y)}</b><small>${fDate(last.x)}${chg != null ? " · " + sgn(chg) : ""}</small></span>` +
+    `<span>Z-score<b>${sgn(z.z)}</b><small>${fDate(z.x)}</small></span>` +
+    (up ? `<span>10 sessions after z &gt; +2<b>${sgn(up.mean, 1)}%</b><small>avg, up ${Math.round(up.up)}% of ${up.n}</small></span>` : "") +
+    (dn ? `<span>10 sessions after z &lt; −2<b>${sgn(dn.mean, 1)}%</b><small>avg, up ${Math.round(dn.up)}% of ${dn.n}</small></span>` : "");
+})();
+
+let months4 = 12;
+function drawFut() {
+  const host = $("c-fut");
+  if (!FUT.length) { host.innerHTML = ""; return; }
+  const end = Math.max(now, ...FUT.map(r => r.x));
+  const start = end - months4 * 30.44 * 864e5;
+  const fp = FUT.filter(p => p.x >= start), zp = ZS.filter(p => p.x >= start);
+  const zByDate = new Map(ZS.map(r => [r.d, r]));
+  // two panels: futures on top, z-score below, one x scale
+  const H = 400, gapY = 28, z_h = 120;
+  const f = frame(host, H, { t: 12, r: 92, b: 26, l: 46 });
+  const top = { svg: f.svg, x0: f.x0, x1: f.x1, y1: f.y1, y0: f.y0 - z_h - gapY };
+  const bot = { svg: f.svg, x0: f.x0, x1: f.x1, y1: f.y0 - z_h, y0: f.y0 };
+  const xs = scale(start, end, f.x0, f.x1);
+  // futures
+  const fy = fp.map(p => p.y);
+  const pad = (Math.max(...fy) - Math.min(...fy)) * 0.06 || 10;
+  const tk = niceTicks(Math.min(...fy) - pad, Math.max(...fy) + pad, 5);
+  const ys = scale(tk[0], tk[tk.length - 1], top.y0, top.y1);
+  yAxis(top, ys, tk, "");
+  el("line", { x1: f.x0, x2: f.x1, y1: top.y0, y2: top.y0, stroke: css("--axis") }, f.svg);
+  if (fp.length > 1) el("path", { d: fp.map((p, i) => `${i ? "L" : "M"}${xs(p.x).toFixed(1)},${ys(p.y).toFixed(1)}`).join(""), fill: "none", stroke: css("--s-vix"), "stroke-width": 2, "stroke-linejoin": "round" }, f.svg);
+  for (const p of fp) { const z = zByDate.get(p.d); if (z && Math.abs(z.z) > 2)
+    el("circle", { cx: xs(p.x), cy: ys(p.y), r: 4, fill: css(z.z > 0 ? "--s-strict" : "--s-rv"), stroke: css("--surface"), "stroke-width": 1.5 }, f.svg); }
+  if (fp.length) text(f.svg, f.x1 + 10, ys(fp[fp.length - 1].y) + 4, fmt(fp[fp.length - 1].y, 1), { class: "dl strong" });
+  // z-score
+  const zmax = Math.max(2.5, ...zp.map(p => Math.abs(p.z))) * 1.05;
+  const ztk = niceTicks(-zmax, zmax, 4);
+  const zys = scale(ztk[0], ztk[ztk.length - 1], bot.y0, bot.y1);
+  yAxis(bot, zys, ztk.filter(v => Math.abs(v) < 1e-9 || Math.abs(Math.abs(v) - 2) < 1e-9 || v === ztk[0] || v === ztk[ztk.length - 1]), "");
+  const z0 = zys(0);
+  for (const v of [-2, 2]) el("line", { x1: f.x0, x2: f.x1, y1: zys(v), y2: zys(v), stroke: css("--axis"), "stroke-dasharray": "4 4" }, f.svg);
+  el("line", { x1: f.x0, x2: f.x1, y1: z0, y2: z0, stroke: css("--axis") }, f.svg);
+  if (zp.length > 1) {
+    const d = `M${xs(zp[0].x)},${z0}` + zp.map(p => `L${xs(p.x).toFixed(1)},${zys(p.z).toFixed(1)}`).join("") + `L${xs(zp[zp.length - 1].x)},${z0}Z`;
+    for (const [up, c] of [[true, "--s-strict"], [false, "--s-rv"]]) {
+      const id = `clip-fz-${up ? "up" : "dn"}`;
+      const cp = el("clipPath", { id }, f.svg);
+      el("rect", { x: f.x0, y: up ? bot.y1 : z0, width: f.x1 - f.x0, height: up ? z0 - bot.y1 : bot.y0 - z0 }, cp);
+      el("path", { d, fill: css(c), "fill-opacity": 0.3, stroke: "none", "clip-path": `url(#${id})` }, f.svg);
+    }
+    el("path", { d: zp.map((p, i) => `${i ? "L" : "M"}${xs(p.x).toFixed(1)},${zys(p.z).toFixed(1)}`).join(""), fill: "none", stroke: css("--ink-2"), "stroke-width": 1.3, "stroke-linejoin": "round" }, f.svg);
+    const lz = zp[zp.length - 1];
+    text(f.svg, f.x1 + 10, zys(lz.z) + 4, `z ${lz.z > 0 ? "+" : ""}${fmt(lz.z, 1)}`, { class: "dl strong" });
+  }
+  text(f.svg, f.x0, bot.y1 - 8, "10-day z-score of 3M − 1M", { class: "note" });
+  el("line", { x1: f.x0, x2: f.x1, y1: bot.y0, y2: bot.y0, stroke: css("--axis") }, f.svg);
+  monthTicks(f, xs, start, end, months4);
+  // hover across both panels
+  const t = tip(host);
+  const cross = el("line", { y1: top.y1, y2: bot.y0, stroke: css("--axis"), visibility: "hidden" }, f.svg);
+  const hit = el("rect", { x: f.x0, y: top.y1, width: f.x1 - f.x0, height: bot.y0 - top.y1, fill: "transparent" }, f.svg);
+  hit.addEventListener("mousemove", (ev) => {
+    const r = f.svg.getBoundingClientRect(), px = (ev.clientX - r.left) * f.W / r.width;
+    const x = start + (px - f.x0) / (f.x1 - f.x0) * (end - start);
+    let b = null; for (const p of fp) if (!b || Math.abs(p.x - x) < Math.abs(b.x - x)) b = p;
+    if (!b || Math.abs(b.x - x) > Math.max(2, months4 / 3) * 864e5) { t.hidden = true; cross.setAttribute("visibility", "hidden"); return; }
+    const z = zByDate.get(b.d);
+    cross.setAttribute("x1", xs(b.x)); cross.setAttribute("x2", xs(b.x)); cross.setAttribute("visibility", "visible");
+    t.innerHTML = `<div class="t">${fDate(b.x)}</div>` + row(css("--s-vix"), "S501! close", fmt(b.y)) +
+      (z ? row(css(z.z >= 0 ? "--s-strict" : "--s-rv"), "Z-score (10d)", (z.z > 0 ? "+" : "") + fmt(z.z)) + row(css("--ink-2"), "3M − 1M", (z.sp > 0 ? "+" : "") + fmt(z.sp), false) : "");
+    t.hidden = false; placeTip(host, t, xs(b.x), ys(b.y));
+  });
+  hit.addEventListener("mouseleave", () => { t.hidden = true; cross.setAttribute("visibility", "hidden"); });
+}
+$("range4").addEventListener("click", (e) => {
+  const b = e.target.closest("button"); if (!b) return;
+  months4 = +b.dataset.m;
+  for (const x of $("range4").children) x.setAttribute("aria-pressed", x === b);
+  drawFut();
+});
+
+// ------------------------------------------------------------------ chart 2: term structure
+function drawTerm() {
+  const host = $("c-term");
+  const f = frame(host, 260, { t: 16, r: 16, b: 34, l: 40 });
+  const ex = D.expiries.filter(e => e.strict);
+  const I3 = D.index3m || {};
+  const vals = ex.flatMap(e => [e.strict.vol, e.tail && e.tail.vol]).concat([D.index.tail, D.index.strict, I3.tail]).filter(v => v != null);
+  const lo = Math.floor(Math.min(...vals) - 1), hi = Math.ceil(Math.max(...vals) + 1);
+  const ticks = niceTicks(lo, hi, 4);
+  const ys = scale(ticks[0], ticks[ticks.length - 1], f.y0, f.y1);
+  const xmax = Math.ceil((Math.max(...ex.map(e => e.days), 93) + 10) / 30) * 30;
+  const xs = scale(0, xmax, f.x0, f.x1);
+  yAxis(f, ys, ticks, "%");
+  el("line", { x1: f.x0, x2: f.x1, y1: f.y0, y2: f.y0, stroke: css("--axis") }, f.svg);
+  for (const e of ex) {
+    const x = xs(e.days);
+    el("line", { x1: x, x2: x, y1: f.y0, y2: f.y0 + 4, stroke: css("--axis") }, f.svg);
+    text(f.svg, x, f.y0 + 16, expLabel(e.exp), { "text-anchor": "middle" });
+  }
+  text(f.svg, f.x1, f.y0 + 30, "days to expiry →", { "text-anchor": "end" });
+  // 30-day reference
+  const x30 = xs(30);
+  el("line", { x1: x30, x2: x30, y1: f.y1, y2: f.y0, stroke: css("--axis") }, f.svg);
+  text(f.svg, x30 + 4, f.y1 + 8, "30 days", {});
+  const series = [["strict", "--s-strict", "Strict"], ["tail", "--s-vix", "Tail-completed"]];
+  const pts = {};
+  for (const [v, c] of series) {
+    pts[v] = ex.filter(e => e[v]).map(e => ({ x: xs(e.days), y: ys(e[v].vol), e }));
+    el("path", { d: pts[v].map((p, i) => `${i ? "L" : "M"}${p.x},${p.y}`).join(""), fill: "none", stroke: css(c), "stroke-width": 2, "stroke-linejoin": "round" }, f.svg);
+  }
+  for (const [v, c] of series) for (const p of pts[v])
+    el("circle", { cx: p.x, cy: p.y, r: 4.5, fill: css(c), stroke: css("--surface"), "stroke-width": 2 }, f.svg);
+  // the index itself: a ring on the 30-day line
+  const yi = ys(D.index.tail);
+  el("circle", { cx: x30, cy: yi, r: 6.5, fill: css("--surface"), stroke: css("--s-vix"), "stroke-width": 2.5 }, f.svg);
+  text(f.svg, x30 + 11, yi - 8, `1M (30-day) ${fmt(D.index.tail)}`, { class: "dl strong" });
+  if (I3.tail != null) {
+    const x93 = xs(93), y3 = ys(I3.tail);
+    el("line", { x1: x93, x2: x93, y1: f.y1, y2: f.y0, stroke: css("--axis"), "stroke-dasharray": "3 3" }, f.svg);
+    el("circle", { cx: x93, cy: y3, r: 6.5, fill: css("--surface"), stroke: css("--s-vix3m"), "stroke-width": 2.5 }, f.svg);
+    text(f.svg, x93 + 11, y3 - 8, `3M (93-day) ${fmt(I3.tail)}`, { class: "dl strong" });
+  }
+  // direct labels at the right end
+  const lastT = pts.tail[pts.tail.length - 1], lastS = pts.strict[pts.strict.length - 1];
+  if (lastT && lastS) {
+    const gap = Math.abs(lastT.y - lastS.y) > 14;
+    if (gap) {
+      text(f.svg, lastT.x - 8, lastT.y + (lastT.y < lastS.y ? -10 : 16), "tail-completed", { class: "dl", "text-anchor": "end" });
+      text(f.svg, lastS.x - 8, lastS.y + (lastS.y < lastT.y ? -10 : 16), "strict", { class: "dl", "text-anchor": "end" });
+    }
+  }
+  // hover per expiry column
+  const t = tip(host);
+  ex.forEach((e) => {
+    const x = xs(e.days);
+    const r = el("rect", { x: x - 18, y: f.y1, width: 36, height: f.y0 - f.y1, fill: "transparent" }, f.svg);
+    r.addEventListener("mouseenter", () => {
+      t.innerHTML = `<div class="t">${expLabel(e.exp)} · ${fmt(e.days, 1)} days${e.in_index ? " · in 1M" : ""}${e.in_index3m ? " · in 3M" : ""}</div>` +
+        (e.tail ? row(css("--s-vix"), "Tail-completed", fmt(e.tail.vol) + "%") : "") +
+        row(css("--s-strict"), "Strict", fmt(e.strict.vol) + "%") +
+        `<div class="r" style="color:var(--muted)">Forward<b>${fmt(e.strict.F)}</b></div>`;
+      t.hidden = false; placeTip(host, t, x, ys(e.strict.vol));
+    });
+    r.addEventListener("mouseleave", () => { t.hidden = true; });
+  });
+}
+
+// ------------------------------------------------------------------ chart 3: smile
+const ORD = ["--o1", "--o2", "--o3", "--o4"];
+function drawSmile() {
+  const host = $("c-smile");
+  const ex = D.expiries.filter(e => e.smile && e.smile.length).slice(0, 4);
+  $("smile-legend").innerHTML = ex.map((e, i) => `<span><i class="key" style="background:var(${ORD[i]})"></i>${expLabel(e.exp)}</span>`).join("");
+  const f = frame(host, 260, { t: 16, r: 16, b: 34, l: 40 });
+  const ks = ex.flatMap(e => e.smile.map(s => s.k)), ivs = ex.flatMap(e => e.smile.map(s => s.iv));
+  const kx0 = Math.min(...ks), kx1 = Math.max(...ks);
+  const ticks = niceTicks(Math.floor(Math.min(...ivs) - 1), Math.ceil(Math.max(...ivs) + 1), 4);
+  const ys = scale(ticks[0], ticks[ticks.length - 1], f.y0, f.y1);
+  const xs = scale(kx0, kx1, f.x0, f.x1);
+  yAxis(f, ys, ticks, "%");
+  el("line", { x1: f.x0, x2: f.x1, y1: f.y0, y2: f.y0, stroke: css("--axis") }, f.svg);
+  for (const k of niceTicks(kx0, kx1, 6).filter(k => k >= kx0 && k <= kx1)) {
+    const x = xs(k);
+    el("line", { x1: x, x2: x, y1: f.y0, y2: f.y0 + 4, stroke: css("--axis") }, f.svg);
+    text(f.svg, x, f.y0 + 16, k.toLocaleString("en-US"), { "text-anchor": "middle" });
+  }
+  text(f.svg, f.x1, f.y0 + 30, "strike →", { "text-anchor": "end" });
+  const xs0 = xs(D.spot);
+  el("line", { x1: xs0, x2: xs0, y1: f.y1, y2: f.y0, stroke: css("--axis") }, f.svg);
+  text(f.svg, xs0 + 4, f.y1 + 8, `SET50 ${fmt(D.spot, 0)}`, {});
+  // far expiries first so the near one (the one the index leans on) sits on top
+  [...ex].reverse().forEach((e) => {
+    const i = ex.indexOf(e);
+    el("path", { d: e.smile.map((s, j) => `${j ? "L" : "M"}${xs(s.k)},${ys(s.iv)}`).join(""), fill: "none", stroke: css(ORD[i]), "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round" }, f.svg);
+  });
+  const t = tip(host);
+  const cross = el("line", { y1: f.y1, y2: f.y0, stroke: css("--axis"), visibility: "hidden" }, f.svg);
+  const hit = el("rect", { x: f.x0, y: f.y1, width: f.x1 - f.x0, height: f.y0 - f.y1, fill: "transparent" }, f.svg);
+  const allK = [...new Set(ks)].sort((a, b) => a - b);
+  hit.addEventListener("mousemove", (ev) => {
+    const r = f.svg.getBoundingClientRect(), px = (ev.clientX - r.left) * f.W / r.width;
+    const kv = kx0 + (px - f.x0) / (f.x1 - f.x0) * (kx1 - kx0);
+    const k = allK.reduce((b, c) => Math.abs(c - kv) < Math.abs(b - kv) ? c : b);
+    cross.setAttribute("x1", xs(k)); cross.setAttribute("x2", xs(k)); cross.setAttribute("visibility", "visible");
+    t.innerHTML = `<div class="t">Strike ${k.toLocaleString("en-US")} · ${k <= D.spot ? "puts" : "calls"}</div>` +
+      ex.map((e, i) => { const s = e.smile.find(s => s.k === k); return s ? row(css(ORD[i]), expLabel(e.exp), fmt(s.iv) + "%", false) : ""; }).join("");
+    t.hidden = false; placeTip(host, t, xs(k), f.y1 + 20);
+  });
+  hit.addEventListener("mouseleave", () => { t.hidden = true; cross.setAttribute("visibility", "hidden"); });
+}
+
+// ------------------------------------------------------------------ tables
+(function termTable() {
+  const rows = D.expiries.filter(e => e.strict).map(e => {
+    const w = e.exp === D.near ? D.w_near : e.exp === D.next ? D.w_next : null;
+    const w3 = e.exp === D.near3m ? D.w3m_near : e.exp === D.next3m ? D.w3m_next : null;
+    return `<tr class="${w != null || w3 != null ? "idx" : ""}">
+      <td>${expLabel(e.exp)} ${String(e.exp).slice(0, 4)}</td><td>${fmt(e.days, 1)}</td><td>${fmt(e.strict.F)}</td><td>${e.strict.K0}</td>
+      <td>${e.listed[0]}–${e.listed[1]}</td><td>${e.strict.n} / ${e.tail ? e.tail.n : "–"}</td>
+      <td>${fmt(e.strict.vol)}%</td><td>${e.tail ? fmt(e.tail.vol) + "%" : "–"}</td><td>${w != null ? fmt(w * 100, 1) + "%" : "–"}</td><td>${w3 != null ? fmt(w3 * 100, 1) + "%" : "–"}</td></tr>`;
+  }).join("");
+  $("t-term").innerHTML = `<thead><tr><th>Expiry</th><th>Days</th><th>Forward</th><th>K₀</th><th>Listed strikes</th>
+    <th>Options used (strict / tail)</th><th>Strict vol</th><th>Tail-completed vol</th><th>Weight in 1M</th><th>Weight in 3M</th></tr></thead><tbody>${rows}</tbody>`;
+})();
+
+let stripExp = D.near;
+function stripTable() {
+  const e = D.expiries.find(x => x.exp === stripExp);
+  const t = e.tail && e.tail.rows ? e.tail : e.strict;
+  const maxShare = Math.max(...t.rows.map(r => r.share || 0));
+  const body = t.rows.map(r => {
+    const model = r.side.endsWith("-x"), atm = r.side === "atm";
+    const type = atm ? "Put/call avg" : (r.side.startsWith("put") ? "Put" : "Call");
+    const w = Math.max(1, (r.share || 0) / maxShare * 80);
+    return `<tr class="${model ? "model" : ""} ${atm ? "atm" : ""}">
+      <td>${r.k.toLocaleString("en-US")}${atm ? ' <span class="pill">K₀</span>' : ""}</td>
+      <td>${type}${model ? ' <span class="pill">model</span>' : ""}</td>
+      <td>${r.bid != null ? fmt(r.bid) : "–"}</td><td>${r.ask != null ? fmt(r.ask) : "–"}</td>
+      <td>${fmt(r.q, r.q < 1 ? 3 : 2)}</td>
+      <td>${r.share != null ? fmt(r.share * 100, 1) + "%" : "–"}</td>
+      <td style="text-align:left"><span class="bar" style="width:${w}px;${model ? "opacity:.45" : ""}"></span></td></tr>`;
+  }).join("");
+  $("t-strip").innerHTML = `<thead><tr><th>Strike</th><th>Type</th><th>Bid</th><th>Ask</th><th>Price used</th><th>Share of variance</th><th style="text-align:left">Contribution</th></tr></thead><tbody>${body}</tbody>`;
+}
+$("strip-tabs").innerHTML = [...new Set([D.near, D.next, D.near3m, D.next3m].filter(x => x))].map(x => `<button data-e="${x}" aria-pressed="${x === stripExp}">${expLabel(x)}</button>`).join("");
+$("strip-tabs").addEventListener("click", (ev) => {
+  const b = ev.target.closest("button"); if (!b) return;
+  stripExp = +b.dataset.e;
+  for (const x of $("strip-tabs").children) x.setAttribute("aria-pressed", x === b);
+  stripTable();
+});
+
+$("foot").innerHTML = `Rate ${fmt(D.rate * 100, 3)}% (Thailand 1Y govt yield). Settlement 16:30 Bangkok. ` +
+  `Rows marked <span class="pill">model</span> are Black-76 prices beyond the last listed strike (tail-completed version only). ` +
+  `Independent calculation — not an official TFEX or SET index.`;
+
+function drawAll() { drawHistory(); drawHorizons(); drawZscore(); drawFut(); drawTerm(); drawSmile(); }
+stripTable();
+drawAll();
+let rz; addEventListener("resize", () => { clearTimeout(rz); rz = setTimeout(drawAll, 120); });
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", drawAll);
+new MutationObserver(drawAll).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+</script>
+</body>
+</html>
